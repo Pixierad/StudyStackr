@@ -17,17 +17,28 @@
 
 export const CHANGELOG = [
   {
+    version: '1.1.1 (Not released)',
+    date: '8/5/2025',
+    title: 'Look forward to:',
+    notes: [
+      'Coming soon: Study timer and being able to track study sessions for subjects',
+      'Coming soon: Repeating events.',
+      'Improvement: Universal theme',
+      'Bug fixes and more'
+    ],
+  },
+  {
     version: '1.1.0 (PATCH)',
-    date: '2026-04-25',
+    date: '25/4/2026',
     title: 'Hotfix: deployment rejection fixed',
     notes: [
-      'Fixed an issue where Vercel would reject the latest deployment due to no SSH ket for the repo (my bad).',
+      'Fixed an issue where Vercel would reject the latest deployment due to no SSH key for the repo (my bad).',
       'New: legit nothing lol.'
     ],
   },
   {
     version: '1.1.0',
-    date: '2026-04-25',
+    date: '25/4/2026',
     title: 'Reliability pass and What\'s new',
     notes: [
       'New: "What\'s new" panel — see recent improvements from the Settings sheet.',
@@ -41,7 +52,7 @@ export const CHANGELOG = [
   },
   {
     version: '1.0.0',
-    date: '2026-03-30',
+    date: '30/3/2026',
     title: 'Initial public release',
     notes: [
       'New: tasks with due dates, subjects, and progress tracking.',
