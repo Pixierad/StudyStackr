@@ -14,7 +14,7 @@
 
 import React, { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { supabase, isSupabaseConfigured, currentUserId } from './supabase';
+import { supabase, isSupabaseConfigured } from './supabase';
 
 // ── Static tokens ───────────────────────────────────────────────────────────
 
@@ -469,15 +469,6 @@ export function makeCustomTheme({ name, baseIsDark, primary }) {
 }
 
 // ── Cloud helper ────────────────────────────────────────────────────────────
-// Mirrors the cloudMode() pattern in storage.js: returns the active userId
-// when Supabase is configured and a session exists, else null.
-
-async function cloudMode() {
-  if (!isSupabaseConfigured || !supabase) return null;
-  const uid = await currentUserId();
-  return uid || null;
-}
-
 // ── Context + Provider + hook ───────────────────────────────────────────────
 
 // Bare keys are used in local-only mode (no session) and as the legacy
@@ -510,15 +501,34 @@ export function ThemeProvider({ children }) {
   const [themeKey, setThemeKey] = useState(DEFAULT_THEME);
   const [customThemes, setCustomThemes] = useState([]);
   const [hydrated, setHydrated] = useState(false);
+  const [activeUserId, setActiveUserId] = useState(isSupabaseConfigured ? undefined : null);
 
-  // Load saved prefs on mount.
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) return;
+    let mounted = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (mounted) setActiveUserId(data?.session?.user?.id ?? null);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      setActiveUserId(session?.user?.id ?? null);
+    });
+    return () => {
+      mounted = false;
+      sub?.subscription?.unsubscribe?.();
+    };
+  }, []);
+
+  // Load saved prefs whenever the active account changes.
   // Cloud mode: fetch theme_key + custom_themes from Supabase profiles, fall
   // back to user-scoped AsyncStorage cache if offline/no row.
   // Local mode: read from bare AsyncStorage keys (with legacy mode migration).
   useEffect(() => {
+    if (activeUserId === undefined) return;
+    let cancelled = false;
+    setHydrated(false);
     (async () => {
       try {
-        const uid = await cloudMode();
+        const uid = activeUserId;
         let loadedKey = null;
         let loadedCustoms = [];
 
@@ -579,26 +589,32 @@ export function ThemeProvider({ children }) {
           // legacyAccent is dropped silently — accent is now part of the theme.
         }
 
+        if (cancelled) return;
         setCustomThemes(loadedCustoms);
         if (loadedKey && (THEME_PRESETS[loadedKey] || loadedCustoms.some((t) => t.key === loadedKey))) {
           setThemeKey(loadedKey);
+        } else {
+          setThemeKey(DEFAULT_THEME);
         }
       } catch (e) {
         console.warn('Failed to load theme prefs:', e);
       } finally {
-        setHydrated(true);
+        if (!cancelled) setHydrated(true);
       }
     })();
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [activeUserId]);
 
   // Persist changes whenever themeKey or customThemes changes (after hydration).
   // Cloud mode: write user-scoped AsyncStorage cache + upsert to Supabase.
   // Local mode: write bare AsyncStorage keys.
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || activeUserId === undefined) return;
     (async () => {
       try {
-        const uid = await cloudMode();
+        const uid = activeUserId;
         if (uid) {
           AsyncStorage.setItem(themeKeyFor(uid), themeKey).catch(() => {});
           AsyncStorage.setItem(customThemesKeyFor(uid), JSON.stringify(customThemes)).catch(() => {});
@@ -614,7 +630,7 @@ export function ThemeProvider({ children }) {
         console.warn('Failed to persist theme prefs:', e);
       }
     })();
-  }, [themeKey, customThemes, hydrated]);
+  }, [themeKey, customThemes, hydrated, activeUserId]);
 
   const setTheme = useCallback((key) => {
     setThemeKey(key);

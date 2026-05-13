@@ -17,9 +17,9 @@
 
 export const CHANGELOG = [
   {
-    version: '1.1.1 (Not released)',
-    date: '8/5/2025',
-    title: 'Look forward to:',
+    version: '1.1.1 (Upcoming)',
+    date: '2026-05-08',
+    title: 'Coming next',
     notes: [
       'Coming soon: Study timer and being able to track study sessions for subjects',
       'Coming soon: Repeating events.',

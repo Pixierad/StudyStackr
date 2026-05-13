@@ -73,6 +73,7 @@ function AppContent() {
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [changelogVisible, setChangelogVisible] = useState(false);
   const [hasUnreadChangelog, setHasUnreadChangelog] = useState(false);
+  const [syncError, setSyncError] = useState(null);
 
   const [taskFormResetKey, setTaskFormResetKey] = useState(0);
   const [resumeFormAfterSubjects, setResumeFormAfterSubjects] = useState(false);
@@ -217,6 +218,56 @@ function AppContent() {
     setResumeFormAfterSubjects(false);
   };
 
+  const reportSyncError = useCallback((action, error) => {
+    const message = error?.message || 'Please check your connection and try again.';
+    setSyncError(`Could not ${action}. ${message}`);
+  }, []);
+
+  const persistTask = useCallback(
+    (task, action = 'save task') => {
+      upsertTask(task)
+        .then(() => setSyncError(null))
+        .catch((e) => reportSyncError(action, e));
+    },
+    [reportSyncError]
+  );
+
+  const persistDeleteTask = useCallback(
+    (id) => {
+      deleteTask(id)
+        .then(() => setSyncError(null))
+        .catch((e) => reportSyncError('delete task', e));
+    },
+    [reportSyncError]
+  );
+
+  const persistSubject = useCallback(
+    (subject, previousName = null) => {
+      upsertSubject(subject, previousName)
+        .then(() => setSyncError(null))
+        .catch((e) => reportSyncError('save subject', e));
+    },
+    [reportSyncError]
+  );
+
+  const persistDeleteSubject = useCallback(
+    (name) => {
+      deleteSubject(name)
+        .then(() => setSyncError(null))
+        .catch((e) => reportSyncError('delete subject', e));
+    },
+    [reportSyncError]
+  );
+
+  const persistUserName = useCallback(
+    (name) => {
+      saveUserName(name)
+        .then(() => setSyncError(null))
+        .catch((e) => reportSyncError('save profile', e));
+    },
+    [reportSyncError]
+  );
+
   // ── Per-row mutations ─────────────────────────────────────────────────────
   // Each handler updates local state AND issues a single targeted write to
   // storage. This replaces the bulk "save the entire table" pattern that
@@ -227,7 +278,7 @@ function AppContent() {
       if (editingTask) {
         const updated = { ...editingTask, ...values };
         setTasks((prev) => prev.map((t) => (t.id === editingTask.id ? updated : t)));
-        upsertTask(updated);
+        persistTask(updated);
       } else {
         const newTask = {
           id: newId(),
@@ -239,49 +290,74 @@ function AppContent() {
           createdAt: Date.now(),
         };
         setTasks((prev) => [newTask, ...prev]);
-        upsertTask(newTask);
+        persistTask(newTask);
       }
       closeForm();
     },
-    [editingTask]
+    [editingTask, persistTask]
   );
 
   const handleDeleteTask = useCallback(() => {
     if (!editingTask) return;
     const id = editingTask.id;
     setTasks((prev) => prev.filter((t) => t.id !== id));
-    deleteTask(id);
+    persistDeleteTask(id);
     closeForm();
-  }, [editingTask]);
+  }, [editingTask, persistDeleteTask]);
 
   const toggleDone = useCallback((id) => {
     setTasks((prev) => {
       const next = prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t));
       const changed = next.find((t) => t.id === id);
-      if (changed) upsertTask(changed);
+      if (changed) persistTask(changed, 'update task');
       return next;
     });
-  }, []);
+  }, [persistTask]);
 
   const quickDeleteTask = useCallback((id) => {
     setTasks((prev) => prev.filter((t) => t.id !== id));
-    deleteTask(id);
-  }, []);
+    persistDeleteTask(id);
+  }, [persistDeleteTask]);
 
   // SubjectManager passes us the full next array. Diff it against current
-  // state so we can issue per-row writes (and clear the subject tag from
-  // any tasks that referenced a deleted subject).
+  // state so we can issue per-row writes. Renames keep task tags attached;
+  // true deletions clear the tag from affected tasks.
   const updateSubjects = useCallback(
-    (nextSubjects) => {
+    (nextSubjects, change = {}) => {
+      const renamedFrom =
+        change.renamedFrom && change.renamedFrom !== change.renamedTo
+          ? change.renamedFrom
+          : null;
+      const renamedTo = renamedFrom ? change.renamedTo : null;
       const prevByName = new Map(subjects.map((s) => [s.name, s]));
       const nextByName = new Map(nextSubjects.map((s) => [s.name, s]));
 
-      const removedNames = [...prevByName.keys()].filter((n) => !nextByName.has(n));
+      const removedNames = [...prevByName.keys()].filter(
+        (n) => !nextByName.has(n) && n !== renamedFrom
+      );
       const addedOrChanged = [...nextByName.entries()].filter(
-        ([name, s]) => !prevByName.has(name) || !subjectShallowEqual(prevByName.get(name), s)
+        ([name, s]) =>
+          !prevByName.has(name) ||
+          name === renamedTo ||
+          !subjectShallowEqual(prevByName.get(name), s)
       );
 
-      // Remove deleted subjects from any tagged tasks.
+      if (renamedFrom && renamedTo) {
+        setTasks((prev) => {
+          const updates = [];
+          const next = prev.map((t) => {
+            if (t.subject === renamedFrom) {
+              const renamed = { ...t, subject: renamedTo };
+              updates.push(renamed);
+              return renamed;
+            }
+            return t;
+          });
+          updates.forEach((u) => persistTask(u, 'update task subject'));
+          return next;
+        });
+      }
+
       if (removedNames.length > 0) {
         const removedSet = new Set(removedNames);
         setTasks((prev) => {
@@ -295,18 +371,20 @@ function AppContent() {
             return t;
           });
           // Persist the updates outside the setter (per-row).
-          updates.forEach((u) => upsertTask(u));
+          updates.forEach((u) => persistTask(u, 'clear deleted subject from task'));
           return next;
         });
       }
 
       // Persist subject mutations.
-      removedNames.forEach((name) => deleteSubject(name));
-      addedOrChanged.forEach(([, s]) => upsertSubject(s));
+      removedNames.forEach((name) => persistDeleteSubject(name));
+      addedOrChanged.forEach(([name, s]) => {
+        persistSubject(s, name === renamedTo ? renamedFrom : null);
+      });
 
       setSubjects(nextSubjects);
     },
-    [subjects]
+    [subjects, persistTask, persistDeleteSubject, persistSubject]
   );
 
   const handleSignOut = useCallback(async () => {
@@ -400,6 +478,10 @@ function AppContent() {
 
       <ProgressCard progress={progress} styles={styles} />
 
+      {syncError ? (
+        <SyncErrorBanner message={syncError} onDismiss={() => setSyncError(null)} styles={styles} />
+      ) : null}
+
       <FilterTabs value={filter} onChange={setFilter} counts={counts} />
 
       <FlatList
@@ -465,7 +547,7 @@ function AppContent() {
         userName={userName}
         onNameChange={(name) => {
           setUserName(name);
-          saveUserName(name);
+          persistUserName(name);
         }}
         session={session}
         onSignOut={handleSignOut}
@@ -589,6 +671,17 @@ function ProgressCard({ progress, styles }) {
           />
         </View>
       </View>
+    </View>
+  );
+}
+
+function SyncErrorBanner({ message, onDismiss, styles }) {
+  return (
+    <View style={styles.syncBanner}>
+      <Text style={styles.syncBannerText}>{message}</Text>
+      <Pressable onPress={onDismiss} hitSlop={8} accessibilityLabel="Dismiss sync warning">
+        <Text style={styles.syncBannerDismiss}>Dismiss</Text>
+      </Pressable>
     </View>
   );
 }
@@ -736,6 +829,28 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       height: '100%',
       backgroundColor: colors.primary,
       borderRadius: 3,
+    },
+    syncBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      marginHorizontal: spacing.lg,
+      marginBottom: spacing.sm,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      borderRadius: radius.md,
+      backgroundColor: colors.dangerSoft,
+    },
+    syncBannerText: {
+      flex: 1,
+      color: colors.danger,
+      fontSize: 13,
+      fontWeight: '600',
+    },
+    syncBannerDismiss: {
+      color: colors.danger,
+      fontSize: 13,
+      fontWeight: '800',
     },
     list: {
       flex: 1,

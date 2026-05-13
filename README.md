@@ -1,75 +1,98 @@
-# School App — Task Tracker
+# SchoolApp - Task Tracker
 
-A clean, modern Expo (React Native) app for tracking schoolwork. Create tasks, tag them by subject, set due dates, and check them off as you go.
+A clean Expo app for tracking schoolwork across web and mobile. Create tasks, tag them by subject, set due dates, customize the theme, and sync your data with Supabase.
 
 ## Features
 
-- **Tasks**: title, subject, due date, done/not done. Tap a task to edit; tap the checkbox to toggle done.
-- **Subjects**: manage your own list of classes. Each subject gets a consistent color badge.
-- **Filters**: quickly switch between All, Today, Upcoming, Overdue, and Done — each with a live count.
-- **Progress**: header card shows completion percentage.
-- **Smart date labels**: "Today", "Tomorrow", "In 3 days", "Mon, Apr 21", with color coding for overdue / today / soon.
-- **Persistence**: everything saves locally to device storage (AsyncStorage). Survives app restarts.
-- **No account, no backend**: fully offline.
+- **Tasks**: title, description, subject, due date, done/not done.
+- **Subjects**: custom classes with optional room, teacher, and color.
+- **Filters**: All, Today, Upcoming, Overdue, and Done with live counts.
+- **Progress**: home screen completion summary.
+- **Smart dates**: Today, Tomorrow, In 3 days, and calendar labels.
+- **Accounts**: Supabase email/password and one-time-code sign-in.
+- **Cloud sync**: tasks, subjects, profile name, and theme settings sync through Supabase.
+- **Offline fallback**: local AsyncStorage cache lets the app load recent data if Supabase is temporarily unavailable.
+- **Offline saves**: edits made while disconnected are queued locally and replayed when the app can reach Supabase again.
+- **Themes**: preset themes plus custom light/dark themes.
+- **Web deploys**: Expo web export deployed to Vercel.
 
-## Project structure
+## Project Structure
 
-```
+```text
 SchoolApp/
-├── App.js                          Main app: header, filters, list, FAB, modals
-├── app.json                        Expo config
-├── package.json
-├── babel.config.js
-├── assets/                         (add icon.png, splash-icon.png, etc.)
+├── App.js                         Main app shell, auth-aware loading, filters, modals
+├── app.json                       Expo app config
+├── package.json                   Scripts and dependencies
+├── deploy.ps1                     Signed commit, web export, and Vercel deploy helper
+├── supabase-setup.sql             Supabase tables, RLS policies, indexes, profile trigger
+├── vercel.json                    Vercel static hosting config
+├── assets/                        App icons and splash assets
 └── src/
-    ├── theme.js                    Colors, spacing, typography, shadows
-    ├── storage.js                  AsyncStorage helpers for tasks + subjects
+    ├── supabase.js                Supabase client and session helper
+    ├── storage.js                 Data access layer with Supabase + local cache fallback
+    ├── theme.js                   Theme tokens, custom themes, persistence
+    ├── changelog.js               In-app release notes
     ├── utils/
-    │   └── dates.js                Date formatting and relative labels
+    │   ├── dates.js               Date formatting and due status helpers
+    │   └── subjects.js            Subject lookup and color helpers
     └── components/
-        ├── TaskCard.js             Single task row with checkbox + badges
-        ├── TaskForm.js             Add/edit task bottom sheet (with date picker)
-        ├── SubjectManager.js       Add/remove subjects bottom sheet
-        ├── FilterTabs.js           Horizontal filter chips with counts
-        └── EmptyState.js           Friendly empty-list placeholder
+        ├── AuthScreen.js
+        ├── ChangelogSheet.js
+        ├── EmptyState.js
+        ├── FilterTabs.js
+        ├── SettingsSheet.js
+        ├── SubjectManager.js
+        ├── TaskCard.js
+        └── TaskForm.js
 ```
 
-## Data model
+## Setup
 
-Everything lives in AsyncStorage under two keys.
+Install dependencies:
 
-**Task**
-```js
-{
-  id: string,          // unique
-  title: string,       // required
-  subject: string|null,
-  dueDate: string|null, // "YYYY-MM-DD"
-  done: boolean,
-  createdAt: number    // epoch ms
-}
+```powershell
+npm install
 ```
 
-**Subjects**: a simple array of strings, e.g. `["Math 101", "History", "Biology"]`.
+Copy the example env file and add your Supabase project values:
 
-## Styling
+```powershell
+Copy-Item .env.local.example .env.local
+```
 
-All visual tokens live in `src/theme.js` — change one value there and it propagates everywhere. The subject badge palette cycles through 8 colors, and the same subject name always hashes to the same color for consistency.
+Then run the SQL in `supabase-setup.sql` inside the Supabase SQL Editor. It creates `profiles`, `subjects`, and `tasks`, enables row-level security, and adds per-user policies.
 
-## Roadmap ideas
+Start the app:
 
-- Reminders / push notifications
-- Recurring tasks (weekly problem sets, etc.)
-- Priority field
-- Notes / attachments
-- Cloud sync
-- Calendar view
+```powershell
+npm run web
+```
 
-## Assets
+## Data Model
 
-Add the following to `assets/` (referenced in `app.json`). Until they exist, Expo shows warnings but the app runs fine:
+Supabase stores user-owned rows:
 
-- `icon.png` — 1024×1024
-- `splash-icon.png`
-- `adaptive-icon.png` (Android, 1024×1024)
-- `favicon.png` (web)
+- `profiles`: display name, selected theme, custom themes.
+- `subjects`: subject name, room, teacher, color.
+- `tasks`: task title, description, subject name, due date, completion state, created timestamp.
+
+The client also keeps an AsyncStorage cache per user so the UI can load quickly and fall back if Supabase is unavailable. When a network write fails because the device is offline, the write is stored in a per-user pending queue and replayed on the next successful data load.
+
+## Deploying To Vercel
+
+The deploy helper signs and pushes a commit, exports the Expo web bundle, and deploys `dist/` to Vercel:
+
+```powershell
+npm run deploy -- "Deploy: message here"
+```
+
+For first-time setup, link the Vercel project locally and make sure commit signing is configured if your Vercel project rejects unverified commits.
+
+## Mobile App Roadmap
+
+- Add EAS build config with iOS bundle ID and Android package name.
+- Add app-store version/build number management.
+- Decide whether Supabase sessions should move from AsyncStorage to SecureStore for native builds.
+- Add reminders with `expo-notifications`.
+- Add conflict-aware offline sync using `updated_at` columns and retry state.
+- Add automated smoke tests for task, subject, auth, and sync flows.

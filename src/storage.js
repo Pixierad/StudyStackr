@@ -35,6 +35,7 @@ const LEGACY_TASKS_KEY = '@simpleapp:tasks:v1';
 const LEGACY_SUBJECTS_KEY = '@simpleapp:subjects:v1';
 const LEGACY_USER_NAME_KEY = '@simpleapp:userName:v1';
 const MIGRATION_FLAG_PREFIX = '@simpleapp:migrated:';
+const PENDING_WRITES_PREFIX = '@simpleapp:pendingWrites:';
 
 function tasksKey(userId) {
   return userId ? `@simpleapp:tasks:${userId}:v1` : LEGACY_TASKS_KEY;
@@ -44,6 +45,9 @@ function subjectsKey(userId) {
 }
 function userNameKey(userId) {
   return userId ? `@simpleapp:userName:${userId}:v1` : LEGACY_USER_NAME_KEY;
+}
+function pendingWritesKey(userId) {
+  return `${PENDING_WRITES_PREFIX}${userId}:v1`;
 }
 
 // Small helper: returns the active user id when we should hit Supabase, else null.
@@ -59,15 +63,14 @@ async function cloudMode() {
 // server. This addresses the race in bulk saveTasks (review item #5).
 let _writeChain = Promise.resolve();
 function runQueued(fn) {
-  const next = _writeChain.then(() => fn()).catch((e) => {
+  const next = _writeChain.then(() => fn());
+  _writeChain = next.catch((e) => {
     console.warn('Queued write failed:', e?.message || e);
   });
-  _writeChain = next.then(
-    () => undefined,
-    () => undefined
-  );
   return next;
 }
+
+let _flushChain = Promise.resolve();
 
 // ── Normalizers ────────────────────────────────────────────────────────────
 
@@ -154,6 +157,113 @@ async function writeLocalArray(key, arr) {
   } catch (e) {
     console.warn('Failed to write local array:', e);
   }
+}
+
+function isNetworkError(error) {
+  const message = String(error?.message || error || '').toLowerCase();
+  return (
+    message.includes('network request failed') ||
+    message.includes('failed to fetch') ||
+    message.includes('fetch failed') ||
+    message.includes('load failed') ||
+    message.includes('networkerror')
+  );
+}
+
+async function enqueuePendingWrite(uid, op) {
+  if (!uid || !op?.type) return;
+  const key = pendingWritesKey(uid);
+  const pending = await readLocalArray(key);
+  const next = [...pending, { ...op, queuedAt: Date.now(), queueId: newId() }];
+  await AsyncStorage.setItem(key, JSON.stringify(next));
+}
+
+async function applyPendingWrite(uid, op) {
+  switch (op.type) {
+    case 'upsertTask': {
+      const { error } = await supabase
+        .from('tasks')
+        .upsert([taskToRow(op.task, uid)], { onConflict: 'id' });
+      if (error) throw error;
+      return;
+    }
+    case 'deleteTask': {
+      const { error } = await supabase
+        .from('tasks')
+        .delete()
+        .eq('user_id', uid)
+        .eq('id', op.id);
+      if (error) throw error;
+      return;
+    }
+    case 'upsertSubject': {
+      if (op.previousName && op.previousName !== op.subject?.name) {
+        const { error: delErr } = await supabase
+          .from('subjects')
+          .delete()
+          .eq('user_id', uid)
+          .eq('name', op.previousName);
+        if (delErr) throw delErr;
+      }
+      const cleaned = normalizeSubject(op.subject);
+      if (!cleaned) return;
+      const { error } = await supabase
+        .from('subjects')
+        .upsert([subjectToRow(cleaned, uid)], { onConflict: 'user_id,name' });
+      if (error) throw error;
+      return;
+    }
+    case 'deleteSubject': {
+      const { error } = await supabase
+        .from('subjects')
+        .delete()
+        .eq('user_id', uid)
+        .eq('name', op.name);
+      if (error) throw error;
+      return;
+    }
+    case 'saveUserName': {
+      const { error } = await supabase
+        .from('profiles')
+        .upsert({ id: uid, name: op.name ?? '' }, { onConflict: 'id' });
+      if (error) throw error;
+      return;
+    }
+    default:
+      return;
+  }
+}
+
+async function flushPendingWrites(uid) {
+  if (!uid || !supabase) return;
+  _flushChain = _flushChain.then(async () => {
+    const key = pendingWritesKey(uid);
+    const pending = await readLocalArray(key);
+    if (pending.length === 0) return;
+
+    const remaining = [];
+    for (const op of pending) {
+      try {
+        await applyPendingWrite(uid, op);
+      } catch (e) {
+        if (isNetworkError(e)) {
+          remaining.push(op);
+        } else {
+          console.warn('Dropping pending write that no longer applies:', e?.message || e);
+        }
+      }
+    }
+    await AsyncStorage.setItem(key, JSON.stringify(remaining));
+  }).catch((e) => {
+    console.warn('Failed to flush pending writes:', e?.message || e);
+  });
+  return _flushChain;
+}
+
+async function queueIfOffline(uid, op, error) {
+  if (!isNetworkError(error)) throw error;
+  await enqueuePendingWrite(uid, op);
+  return { queued: true };
 }
 
 // ── One-time legacy migration ──────────────────────────────────────────────
@@ -254,6 +364,7 @@ export async function loadTasks() {
 
   if (uid) {
     await migrateLegacyIfNeeded(uid);
+    await flushPendingWrites(uid);
     try {
       const { data, error } = await supabase
         .from('tasks')
@@ -291,10 +402,14 @@ export async function upsertTask(task) {
       return [task, ...prev];
     });
     return runQueued(async () => {
-      const { error } = await supabase
-        .from('tasks')
-        .upsert([taskToRow(task, uid)], { onConflict: 'id' });
-      if (error) throw error;
+      try {
+        const { error } = await supabase
+          .from('tasks')
+          .upsert([taskToRow(task, uid)], { onConflict: 'id' });
+        if (error) throw error;
+      } catch (e) {
+        return queueIfOffline(uid, { type: 'upsertTask', task }, e);
+      }
     });
   }
 
@@ -316,12 +431,16 @@ export async function deleteTask(id) {
   if (uid) {
     await updateLocalTaskCache(uid, (prev) => prev.filter((t) => t.id !== id));
     return runQueued(async () => {
-      const { error } = await supabase
-        .from('tasks')
-        .delete()
-        .eq('user_id', uid)
-        .eq('id', id);
-      if (error) throw error;
+      try {
+        const { error } = await supabase
+          .from('tasks')
+          .delete()
+          .eq('user_id', uid)
+          .eq('id', id);
+        if (error) throw error;
+      } catch (e) {
+        return queueIfOffline(uid, { type: 'deleteTask', id }, e);
+      }
     });
   }
 
@@ -342,6 +461,7 @@ export async function loadSubjects() {
 
   if (uid) {
     await migrateLegacyIfNeeded(uid);
+    await flushPendingWrites(uid);
     try {
       const { data, error } = await supabase
         .from('subjects')
@@ -383,18 +503,26 @@ export async function upsertSubject(subject, previousName = null) {
       return next;
     });
     return runQueued(async () => {
-      if (renamed) {
-        const { error: delErr } = await supabase
+      try {
+        if (renamed) {
+          const { error: delErr } = await supabase
+            .from('subjects')
+            .delete()
+            .eq('user_id', uid)
+            .eq('name', previousName);
+          if (delErr) throw delErr;
+        }
+        const { error: upErr } = await supabase
           .from('subjects')
-          .delete()
-          .eq('user_id', uid)
-          .eq('name', previousName);
-        if (delErr) throw delErr;
+          .upsert([subjectToRow(cleaned, uid)], { onConflict: 'user_id,name' });
+        if (upErr) throw upErr;
+      } catch (e) {
+        return queueIfOffline(
+          uid,
+          { type: 'upsertSubject', subject: cleaned, previousName: renamed ? previousName : null },
+          e
+        );
       }
-      const { error: upErr } = await supabase
-        .from('subjects')
-        .upsert([subjectToRow(cleaned, uid)], { onConflict: 'user_id,name' });
-      if (upErr) throw upErr;
     });
   }
 
@@ -415,12 +543,16 @@ export async function deleteSubject(name) {
   if (uid) {
     await updateLocalSubjectCache(uid, (prev) => prev.filter((s) => s.name !== name));
     return runQueued(async () => {
-      const { error } = await supabase
-        .from('subjects')
-        .delete()
-        .eq('user_id', uid)
-        .eq('name', name);
-      if (error) throw error;
+      try {
+        const { error } = await supabase
+          .from('subjects')
+          .delete()
+          .eq('user_id', uid)
+          .eq('name', name);
+        if (error) throw error;
+      } catch (e) {
+        return queueIfOffline(uid, { type: 'deleteSubject', name }, e);
+      }
     });
   }
 
@@ -440,6 +572,7 @@ export async function loadUserName() {
   const uid = await cloudMode();
 
   if (uid) {
+    await flushPendingWrites(uid);
     try {
       // NOTE: maybeSingle() (not single()) is intentional. The profile row
       // is created by a database trigger on sign-up, but users that signed
@@ -479,10 +612,14 @@ export async function saveUserName(name) {
   if (uid) {
     AsyncStorage.setItem(userNameKey(uid), name).catch(() => {});
     return runQueued(async () => {
-      const { error } = await supabase
-        .from('profiles')
-        .upsert({ id: uid, name }, { onConflict: 'id' });
-      if (error) throw error;
+      try {
+        const { error } = await supabase
+          .from('profiles')
+          .upsert({ id: uid, name }, { onConflict: 'id' });
+        if (error) throw error;
+      } catch (e) {
+        return queueIfOffline(uid, { type: 'saveUserName', name }, e);
+      }
     });
   }
 

@@ -104,6 +104,8 @@ export default function SubjectManager({
   ).current;
 
   const handleSaveSubject = (next) => {
+    const previousName =
+      editing && editing.index != null ? subjects[editing.index]?.name ?? null : null;
     const name = (next.name || '').trim();
     if (!name) {
       Alert.alert('Missing name', 'Subject needs a name.');
@@ -128,7 +130,7 @@ export default function SubjectManager({
 
     if (editing && editing.index != null) {
       const updated = subjects.map((s, i) => (i === editing.index ? cleaned : s));
-      onChange(updated);
+      onChange(updated, { renamedFrom: previousName, renamedTo: cleaned.name });
     } else {
       onChange([...subjects, cleaned]);
     }
