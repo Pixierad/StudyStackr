@@ -465,6 +465,10 @@ function AppContent() {
       <StatusBar style={isDark ? 'light' : 'dark'} />
 
       <View style={styles.header}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.greeting}>{greeting(publicName(profile))}</Text>
+          <Text style={styles.headerTitle}>Your tasks</Text>
+        </View>
         <View style={styles.headerActions}>
           <Pressable
             onPress={() => setSettingsVisible(true)}
@@ -483,10 +487,6 @@ function AppContent() {
             <Text style={styles.iconBtnText}>📜</Text>
             {hasUnreadChangelog ? <View style={styles.unreadDot} /> : null}
           </Pressable>
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.greeting}>{greeting(publicName(profile))}</Text>
-          <Text style={styles.headerTitle}>Your tasks</Text>
         </View>
       </View>
 
