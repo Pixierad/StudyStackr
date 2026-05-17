@@ -53,6 +53,7 @@ const SORT_OPTIONS = [
   { key: 'due_date', label: 'Date due' },
   { key: 'alphabetical', label: 'A-Z' },
 ];
+const STATUS_ONLY_FILTERS = new Set(['incomplete', 'complete']);
 
 export default function App() {
   return (
@@ -118,6 +119,12 @@ function AppContent() {
       sub?.subscription?.unsubscribe?.();
     };
   }, []);
+
+  useEffect(() => {
+    if (STATUS_ONLY_FILTERS.has(filter) && sortMode === 'not_done_first') {
+      setSortMode('due_date');
+    }
+  }, [filter, sortMode]);
 
   // Load user data whenever the active identity changes (sign in / sign out /
   // first boot in local mode). Re-keying on session.user?.id guarantees a
@@ -244,13 +251,13 @@ function AppContent() {
 
   const counts = useMemo(() => {
     const today = todayISO();
-    const c = { all: tasks.length, not_done: 0, today: 0, upcoming: 0, overdue: 0, done: 0 };
+    const c = { all: tasks.length, incomplete: 0, today: 0, upcoming: 0, overdue: 0, complete: 0 };
     for (const t of tasks) {
       if (t.done) {
-        c.done++;
+        c.complete++;
         continue;
       }
-      c.not_done++;
+      c.incomplete++;
       if (!t.dueDate) continue;
       const diff = daysBetween(today, t.dueDate);
       if (diff < 0) c.overdue++;
@@ -266,7 +273,7 @@ function AppContent() {
     const matches = tasks.filter((t) => {
       const status = dueStatus(t.dueDate, t.done);
       switch (filter) {
-        case 'not_done':
+        case 'incomplete':
           return !t.done;
         case 'today':
           return status === 'today';
@@ -275,7 +282,7 @@ function AppContent() {
           return !t.done && (status === 'soon' || status === 'future');
         case 'overdue':
           return status === 'overdue';
-        case 'done':
+        case 'complete':
           return t.done;
         case 'all':
         default:
@@ -613,7 +620,7 @@ function AppContent() {
 
       <FilterTabs value={filter} onChange={setFilter} counts={counts} />
 
-      <SortControls value={sortMode} onChange={setSortMode} styles={styles} />
+      <SortControls value={sortMode} onChange={setSortMode} filter={filter} styles={styles} />
 
       <FlatList
         data={filtered}
@@ -833,12 +840,15 @@ function BarButton({ label, icon, avatar, onPress, accessibilityLabel, styles })
   );
 }
 
-function SortControls({ value, onChange, styles }) {
+function SortControls({ value, onChange, filter, styles }) {
+  const options = STATUS_ONLY_FILTERS.has(filter)
+    ? SORT_OPTIONS.filter((option) => option.key !== 'not_done_first')
+    : SORT_OPTIONS;
   return (
     <View style={styles.sortControls}>
       <Text style={styles.sortLabel}>Order</Text>
       <View style={styles.sortOptions}>
-        {SORT_OPTIONS.map((option) => {
+        {options.map((option) => {
           const active = value === option.key;
           return (
             <Pressable
@@ -1127,7 +1137,7 @@ function greeting(name) {
 function emptyTitleFor(filter, total) {
   if (total === 0) return 'No tasks or events yet';
   switch (filter) {
-    case 'not_done':
+    case 'incomplete':
       return 'No unfinished tasks or events';
     case 'today':
       return 'Nothing upcoming or due today';
@@ -1135,7 +1145,7 @@ function emptyTitleFor(filter, total) {
       return 'No upcoming tasks or events';
     case 'overdue':
       return 'Nothing overdue';
-    case 'done':
+    case 'complete':
       return 'No completed tasks or events';
     default:
       return 'All caught up';
@@ -1147,13 +1157,13 @@ function emptySubtitleFor(filter, total) {
   switch (filter) {
     case 'today':
       return 'Enjoy your day — or get ahead on something upcoming.';
-    case 'not_done':
+    case 'incomplete':
       return 'Everything is finished for now.';
     case 'upcoming':
       return 'No future due dates scheduled.';
     case 'overdue':
       return "You're on top of things. 🎉";
-    case 'done':
+    case 'complete':
       return 'Completed tasks will show up here.';
     default:
       return '';
@@ -1161,7 +1171,7 @@ function emptySubtitleFor(filter, total) {
 }
 
 function emptyIconFor(filter, total) {
-  if (filter === 'not_done') return '✅';
+  if (filter === 'incomplete') return '✅';
   if (total === 0) return '📚';
   switch (filter) {
     case 'today':
@@ -1170,7 +1180,7 @@ function emptyIconFor(filter, total) {
       return '📅';
     case 'overdue':
       return '🎯';
-    case 'done':
+    case 'complete':
       return '✅';
     default:
       return '🎉';

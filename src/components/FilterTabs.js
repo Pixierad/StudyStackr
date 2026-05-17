@@ -4,11 +4,11 @@ import { useTheme } from '../theme';
 
 export const FILTERS = [
   { key: 'all', label: 'All' },
-  { key: 'not_done', label: 'Not done' },
+  { key: 'incomplete', label: 'Not done' },
   { key: 'today', label: 'Today' },
   { key: 'upcoming', label: 'Upcoming' },
   { key: 'overdue', label: 'Overdue' },
-  { key: 'done', label: 'Done' },
+  { key: 'complete', label: 'Done' },
 ];
 
 export default function FilterTabs({ value, onChange, counts = {} }) {

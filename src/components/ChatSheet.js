@@ -12,6 +12,7 @@ import {
   Dimensions,
   ActivityIndicator,
   KeyboardAvoidingView,
+  Keyboard,
   Platform,
 } from 'react-native';
 
@@ -38,7 +39,11 @@ const DURATION_OPTIONS = [
   { label: '7d', hours: 168 },
 ];
 const COMPOSER_INPUT_MIN_HEIGHT = 40;
-const COMPOSER_INPUT_MAX_HEIGHT = 136;
+const COMPOSER_INPUT_LINE_HEIGHT = 20;
+const COMPOSER_INPUT_VERTICAL_PADDING = 16;
+const COMPOSER_INPUT_MAX_LINES = 6;
+const COMPOSER_INPUT_MAX_HEIGHT =
+  COMPOSER_INPUT_LINE_HEIGHT * COMPOSER_INPUT_MAX_LINES + COMPOSER_INPUT_VERTICAL_PADDING;
 
 export default function ChatSheet({ visible, onClose, session = null, profile = null }) {
   const { colors, spacing, radius, typography, shadow } = useTheme();
@@ -524,7 +529,12 @@ function RoomView({
   scrollRef,
 }) {
   const [selection, setSelection] = useState({ start: draft.length, end: draft.length });
-  const [inputHeight, setInputHeight] = useState(COMPOSER_INPUT_MIN_HEIGHT);
+  const [measuredInputHeight, setMeasuredInputHeight] = useState(0);
+  const [keyboardInset, setKeyboardInset] = useState(0);
+  const inputHeight = useMemo(
+    () => composerHeightForText(draft, measuredInputHeight),
+    [draft, measuredInputHeight]
+  );
   const currentUsername = normalizeUsername(profile?.username);
   const activeMention =
     getActiveMention(draft, selection.start) || getActiveMention(draft, draft.length);
@@ -533,8 +543,26 @@ function RoomView({
     [room, userId, activeMention?.query]
   );
   useEffect(() => {
-    if (!draft) setInputHeight(COMPOSER_INPUT_MIN_HEIGHT);
+    if (!draft) setMeasuredInputHeight(0);
   }, [draft]);
+  useEffect(() => {
+    if (Platform.OS === 'web') return undefined;
+
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, (event) => {
+      setKeyboardInset(event.endCoordinates?.height || 0);
+      setTimeout(() => scrollRef.current?.scrollToEnd?.({ animated: true }), 50);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardInset(0);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [scrollRef]);
   const showMentions = !!activeMention && mentionOptions.length > 0;
   const insertMention = (person) => {
     const handle = mentionHandle(person);
@@ -549,14 +577,8 @@ function RoomView({
     setSelection({ start: value.length, end: value.length });
   };
   const updateInputHeight = (event) => {
-    const nextHeight = Math.ceil(event.nativeEvent.contentSize?.height || 0);
-    if (!nextHeight) return;
-    setInputHeight(
-      Math.min(
-        COMPOSER_INPUT_MAX_HEIGHT,
-        Math.max(COMPOSER_INPUT_MIN_HEIGHT, nextHeight)
-      )
-    );
+    const measuredHeight = Math.ceil(event.nativeEvent.contentSize?.height || 0);
+    setMeasuredInputHeight(measuredHeight);
   };
   const handleComposerKeyPress = (event) => {
     const nativeEvent = event.nativeEvent || {};
@@ -571,7 +593,6 @@ function RoomView({
   return (
     <KeyboardAvoidingView
       style={styles.roomWrap}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <Text style={styles.expiryText}>{expiresText(room?.expiresAt)}</Text>
       <ScrollView
@@ -600,7 +621,7 @@ function RoomView({
         })}
       </ScrollView>
       {message ? <MessageBox styles={styles} text={message} /> : null}
-      <View style={styles.composer}>
+      <View style={[styles.composer, keyboardInset ? { marginBottom: keyboardInset } : null]}>
         {showMentions ? (
           <View style={[styles.mentionPanel, { bottom: inputHeight + 12 }]}>
             {mentionOptions.map((person) => (
@@ -636,6 +657,10 @@ function RoomView({
           placeholderTextColor={colors.textFaint}
           style={[styles.composerInput, { height: inputHeight }]}
           multiline
+          numberOfLines={Math.min(
+            COMPOSER_INPUT_MAX_LINES,
+            Math.max(1, String(draft || '').split('\n').length)
+          )}
           scrollEnabled={inputHeight >= COMPOSER_INPUT_MAX_HEIGHT}
           returnKeyType="send"
           submitBehavior={Platform.OS === 'web' ? undefined : 'submit'}
@@ -782,6 +807,18 @@ function getActiveMention(value, cursorPosition) {
   };
 }
 
+function composerHeightForText(value, measuredHeight = 0) {
+  const text = String(value || '');
+  const explicitLineCount = Math.max(1, text.split('\n').length);
+  const explicitLineHeight =
+    explicitLineCount * COMPOSER_INPUT_LINE_HEIGHT + COMPOSER_INPUT_VERTICAL_PADDING;
+  const nextHeight = Math.max(measuredHeight, explicitLineHeight);
+  return Math.min(
+    COMPOSER_INPUT_MAX_HEIGHT,
+    Math.max(COMPOSER_INPUT_MIN_HEIGHT, nextHeight)
+  );
+}
+
 function getMentionOptions(room, userId, query) {
   if (query == null) return [];
   return (room?.members || [])
@@ -854,13 +891,19 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
     backdrop: {
       flex: 1,
       backgroundColor: colors.overlay,
-      justifyContent: 'flex-end',
+      justifyContent: Platform.OS === 'web' ? 'center' : 'flex-end',
+      padding: Platform.OS === 'web' ? spacing.lg : 0,
     },
     backdropFill: { ...StyleSheet.absoluteFillObject },
     sheet: {
+      alignSelf: Platform.OS === 'web' ? 'center' : 'stretch',
       backgroundColor: colors.bg,
       borderTopLeftRadius: radius.xl,
       borderTopRightRadius: radius.xl,
+      borderBottomLeftRadius: Platform.OS === 'web' ? radius.xl : 0,
+      borderBottomRightRadius: Platform.OS === 'web' ? radius.xl : 0,
+      width: Platform.OS === 'web' ? '100%' : undefined,
+      maxWidth: Platform.OS === 'web' ? 860 : undefined,
       height: '88%',
       paddingBottom: spacing.lg,
       overflow: 'hidden',
@@ -1264,7 +1307,7 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       paddingHorizontal: spacing.md,
       paddingVertical: spacing.sm,
       fontSize: 15,
-      lineHeight: 20,
+      lineHeight: COMPOSER_INPUT_LINE_HEIGHT,
       color: colors.text,
       textAlignVertical: 'top',
     },
@@ -1283,11 +1326,14 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
     },
     actionBackdrop: {
       ...StyleSheet.absoluteFillObject,
-      justifyContent: 'flex-end',
+      justifyContent: Platform.OS === 'web' ? 'center' : 'flex-end',
       backgroundColor: colors.overlay,
     },
     actionPanel: {
       margin: spacing.lg,
+      alignSelf: Platform.OS === 'web' ? 'center' : 'stretch',
+      width: Platform.OS === 'web' ? '100%' : undefined,
+      maxWidth: Platform.OS === 'web' ? 420 : undefined,
       backgroundColor: colors.card,
       borderRadius: radius.lg,
       borderWidth: 1,
@@ -1333,6 +1379,9 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
     },
     detailsPanel: {
       margin: spacing.lg,
+      alignSelf: Platform.OS === 'web' ? 'center' : 'stretch',
+      width: Platform.OS === 'web' ? '100%' : undefined,
+      maxWidth: Platform.OS === 'web' ? 520 : undefined,
       backgroundColor: colors.card,
       borderRadius: radius.lg,
       borderWidth: 1,

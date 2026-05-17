@@ -11,6 +11,7 @@ import {
   PanResponder,
   Dimensions,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 
 import { useTheme } from '../theme';
@@ -495,15 +496,22 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
     backdrop: {
       flex: 1,
       backgroundColor: colors.overlay,
-      justifyContent: 'flex-end',
+      justifyContent: Platform.OS === 'web' ? 'center' : 'flex-end',
+      padding: Platform.OS === 'web' ? spacing.lg : 0,
     },
     backdropFill: { ...StyleSheet.absoluteFillObject },
     sheet: {
+      alignSelf: Platform.OS === 'web' ? 'center' : 'stretch',
       backgroundColor: colors.bg,
       borderTopLeftRadius: radius.xl,
       borderTopRightRadius: radius.xl,
+      borderBottomLeftRadius: Platform.OS === 'web' ? radius.xl : 0,
+      borderBottomRightRadius: Platform.OS === 'web' ? radius.xl : 0,
+      width: Platform.OS === 'web' ? '100%' : undefined,
+      maxWidth: Platform.OS === 'web' ? 640 : undefined,
       maxHeight: '88%',
       paddingBottom: spacing.lg,
+      overflow: 'hidden',
     },
     dragZone: {
       paddingBottom: spacing.sm,
