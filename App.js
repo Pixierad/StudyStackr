@@ -48,6 +48,12 @@ import FriendsSheet from './src/components/FriendsSheet';
 import ChatSheet from './src/components/ChatSheet';
 import ProfileAvatar from './src/components/ProfileAvatar';
 
+const SORT_OPTIONS = [
+  { key: 'not_done_first', label: 'Not done first' },
+  { key: 'due_date', label: 'Date due' },
+  { key: 'alphabetical', label: 'A-Z' },
+];
+
 export default function App() {
   return (
     <SafeAreaProvider>
@@ -77,6 +83,7 @@ function AppContent() {
   const [session, setSession] = useState(isSupabaseConfigured ? undefined : null);
 
   const [filter, setFilter] = useState('all');
+  const [sortMode, setSortMode] = useState('not_done_first');
   const [editingTask, setEditingTask] = useState(null);
   const [formVisible, setFormVisible] = useState(false);
   const [subjectMgrVisible, setSubjectMgrVisible] = useState(false);
@@ -237,12 +244,13 @@ function AppContent() {
 
   const counts = useMemo(() => {
     const today = todayISO();
-    const c = { all: tasks.length, today: 0, upcoming: 0, overdue: 0, done: 0 };
+    const c = { all: tasks.length, not_done: 0, today: 0, upcoming: 0, overdue: 0, done: 0 };
     for (const t of tasks) {
       if (t.done) {
         c.done++;
         continue;
       }
+      c.not_done++;
       if (!t.dueDate) continue;
       const diff = daysBetween(today, t.dueDate);
       if (diff < 0) c.overdue++;
@@ -258,6 +266,8 @@ function AppContent() {
     const matches = tasks.filter((t) => {
       const status = dueStatus(t.dueDate, t.done);
       switch (filter) {
+        case 'not_done':
+          return !t.done;
         case 'today':
           return status === 'today';
         case 'upcoming':
@@ -272,14 +282,8 @@ function AppContent() {
           return true;
       }
     });
-    return matches.slice().sort((a, b) => {
-      if (a.done !== b.done) return a.done ? 1 : -1;
-      if (a.dueDate && b.dueDate) return a.dueDate.localeCompare(b.dueDate);
-      if (a.dueDate) return -1;
-      if (b.dueDate) return 1;
-      return (b.createdAt ?? 0) - (a.createdAt ?? 0);
-    });
-  }, [tasks, filter]);
+    return matches.slice().sort((a, b) => compareTasks(a, b, sortMode));
+  }, [tasks, filter, sortMode]);
 
   // OPEN tasks per subject -- mirrors the "tasks remaining" UX we
   // expose on the subject row. Done tasks are explicitly excluded.
@@ -609,6 +613,8 @@ function AppContent() {
 
       <FilterTabs value={filter} onChange={setFilter} counts={counts} />
 
+      <SortControls value={sortMode} onChange={setSortMode} styles={styles} />
+
       <FlatList
         data={filtered}
         keyExtractor={(item) => item.id}
@@ -827,6 +833,32 @@ function BarButton({ label, icon, avatar, onPress, accessibilityLabel, styles })
   );
 }
 
+function SortControls({ value, onChange, styles }) {
+  return (
+    <View style={styles.sortControls}>
+      <Text style={styles.sortLabel}>Order</Text>
+      <View style={styles.sortOptions}>
+        {SORT_OPTIONS.map((option) => {
+          const active = value === option.key;
+          return (
+            <Pressable
+              key={option.key}
+              onPress={() => onChange(option.key)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              style={[styles.sortOption, active && styles.sortOptionActive]}
+            >
+              <Text style={[styles.sortOptionText, active && styles.sortOptionTextActive]}>
+                {option.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 function ProgressCard({ progress, styles }) {
   const { doneCount, total, pct } = progress;
   const { shadow } = useTheme();
@@ -1040,6 +1072,48 @@ function notificationTimeLabel(createdAt) {
   return `${days}d ago`;
 }
 
+function compareTasks(a, b, sortMode) {
+  switch (sortMode) {
+    case 'due_date': {
+      const byDueDate = compareDueDates(a, b);
+      if (byDueDate !== 0) return byDueDate;
+      return compareTitles(a, b) || compareNewestFirst(a, b) || compareIds(a, b);
+    }
+    case 'alphabetical':
+      return (
+        compareTitles(a, b) ||
+        compareDueDates(a, b) ||
+        compareNewestFirst(a, b) ||
+        compareIds(a, b)
+      );
+    case 'not_done_first':
+    default:
+      if (a.done !== b.done) return a.done ? 1 : -1;
+      return compareDueDates(a, b) || compareNewestFirst(a, b) || compareIds(a, b);
+  }
+}
+
+function compareDueDates(a, b) {
+  if (a.dueDate && b.dueDate) return a.dueDate.localeCompare(b.dueDate);
+  if (a.dueDate) return -1;
+  if (b.dueDate) return 1;
+  return 0;
+}
+
+function compareTitles(a, b) {
+  return String(a.title || '').localeCompare(String(b.title || ''), undefined, {
+    sensitivity: 'base',
+  });
+}
+
+function compareNewestFirst(a, b) {
+  return (b.createdAt ?? 0) - (a.createdAt ?? 0);
+}
+
+function compareIds(a, b) {
+  return String(a.id || '').localeCompare(String(b.id || ''));
+}
+
 function greeting(name) {
   const h = new Date().getHours();
   const suffix = name ? `, ${name}` : '';
@@ -1053,6 +1127,8 @@ function greeting(name) {
 function emptyTitleFor(filter, total) {
   if (total === 0) return 'No tasks or events yet';
   switch (filter) {
+    case 'not_done':
+      return 'No unfinished tasks or events';
     case 'today':
       return 'Nothing upcoming or due today';
     case 'upcoming':
@@ -1071,6 +1147,8 @@ function emptySubtitleFor(filter, total) {
   switch (filter) {
     case 'today':
       return 'Enjoy your day — or get ahead on something upcoming.';
+    case 'not_done':
+      return 'Everything is finished for now.';
     case 'upcoming':
       return 'No future due dates scheduled.';
     case 'overdue':
@@ -1083,6 +1161,7 @@ function emptySubtitleFor(filter, total) {
 }
 
 function emptyIconFor(filter, total) {
+  if (filter === 'not_done') return '✅';
   if (total === 0) return '📚';
   switch (filter) {
     case 'today':
@@ -1349,6 +1428,49 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       color: colors.danger,
       fontSize: 13,
       fontWeight: '800',
+    },
+    sortControls: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.xs,
+      paddingBottom: spacing.sm,
+    },
+    sortLabel: {
+      ...typography.caption,
+      textTransform: 'uppercase',
+      fontWeight: '800',
+      minWidth: 44,
+    },
+    sortOptions: {
+      flex: 1,
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.sm,
+    },
+    sortOption: {
+      minHeight: 34,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      borderRadius: radius.pill,
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    sortOptionActive: {
+      backgroundColor: colors.primarySoft,
+      borderColor: colors.primary,
+    },
+    sortOptionText: {
+      color: colors.textMuted,
+      fontSize: 13,
+      fontWeight: '800',
+    },
+    sortOptionTextActive: {
+      color: colors.primary,
     },
     list: {
       flex: 1,
