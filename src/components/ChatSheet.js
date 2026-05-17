@@ -37,6 +37,8 @@ const DURATION_OPTIONS = [
   { label: '3d', hours: 72 },
   { label: '7d', hours: 168 },
 ];
+const COMPOSER_INPUT_MIN_HEIGHT = 40;
+const COMPOSER_INPUT_MAX_HEIGHT = 136;
 
 export default function ChatSheet({ visible, onClose, session = null, profile = null }) {
   const { colors, spacing, radius, typography, shadow } = useTheme();
@@ -522,6 +524,7 @@ function RoomView({
   scrollRef,
 }) {
   const [selection, setSelection] = useState({ start: draft.length, end: draft.length });
+  const [inputHeight, setInputHeight] = useState(COMPOSER_INPUT_MIN_HEIGHT);
   const currentUsername = normalizeUsername(profile?.username);
   const activeMention =
     getActiveMention(draft, selection.start) || getActiveMention(draft, draft.length);
@@ -529,6 +532,9 @@ function RoomView({
     () => getMentionOptions(room, userId, activeMention?.query),
     [room, userId, activeMention?.query]
   );
+  useEffect(() => {
+    if (!draft) setInputHeight(COMPOSER_INPUT_MIN_HEIGHT);
+  }, [draft]);
   const showMentions = !!activeMention && mentionOptions.length > 0;
   const insertMention = (person) => {
     const handle = mentionHandle(person);
@@ -541,6 +547,25 @@ function RoomView({
   const updateDraft = (value) => {
     setDraft(value);
     setSelection({ start: value.length, end: value.length });
+  };
+  const updateInputHeight = (event) => {
+    const nextHeight = Math.ceil(event.nativeEvent.contentSize?.height || 0);
+    if (!nextHeight) return;
+    setInputHeight(
+      Math.min(
+        COMPOSER_INPUT_MAX_HEIGHT,
+        Math.max(COMPOSER_INPUT_MIN_HEIGHT, nextHeight)
+      )
+    );
+  };
+  const handleComposerKeyPress = (event) => {
+    const nativeEvent = event.nativeEvent || {};
+    if (Platform.OS !== 'web') return;
+    if (nativeEvent.key !== 'Enter' || nativeEvent.shiftKey) return;
+    event.preventDefault?.();
+    nativeEvent.preventDefault?.();
+    if (!draft.trim() || busy) return;
+    onSend?.();
   };
 
   return (
@@ -577,7 +602,7 @@ function RoomView({
       {message ? <MessageBox styles={styles} text={message} /> : null}
       <View style={styles.composer}>
         {showMentions ? (
-          <View style={styles.mentionPanel}>
+          <View style={[styles.mentionPanel, { bottom: inputHeight + 12 }]}>
             {mentionOptions.map((person) => (
               <Pressable
                 key={person.id}
@@ -596,11 +621,24 @@ function RoomView({
         <TextInput
           value={draft}
           onChangeText={updateDraft}
+          onContentSizeChange={updateInputHeight}
+          onKeyPress={handleComposerKeyPress}
+          onSubmitEditing={
+            Platform.OS === 'web'
+              ? undefined
+              : () => {
+                  if (!draft.trim() || busy) return;
+                  onSend?.();
+                }
+          }
           onSelectionChange={(event) => setSelection(event.nativeEvent.selection)}
           placeholder="Message"
           placeholderTextColor={colors.textFaint}
-          style={styles.composerInput}
+          style={[styles.composerInput, { height: inputHeight }]}
           multiline
+          scrollEnabled={inputHeight >= COMPOSER_INPUT_MAX_HEIGHT}
+          returnKeyType="send"
+          submitBehavior={Platform.OS === 'web' ? undefined : 'submit'}
           maxLength={2000}
         />
         <Pressable
@@ -1219,8 +1257,6 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
     },
     composerInput: {
       flex: 1,
-      maxHeight: 110,
-      minHeight: 44,
       backgroundColor: colors.card,
       borderRadius: radius.md,
       borderWidth: 1,
@@ -1228,7 +1264,9 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       paddingHorizontal: spacing.md,
       paddingVertical: spacing.sm,
       fontSize: 15,
+      lineHeight: 20,
       color: colors.text,
+      textAlignVertical: 'top',
     },
     sendBtn: {
       minHeight: 44,
