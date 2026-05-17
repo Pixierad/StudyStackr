@@ -238,7 +238,7 @@ export default function AuthScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={[styles.card, shadow.card]}>
-          <Text style={styles.brand}>SchoolApp</Text>
+          <Text style={styles.brand}>PLACEHOLDER APP NAME (I severely need ideas)</Text>
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.subtitle}>{subtitle}</Text>
 

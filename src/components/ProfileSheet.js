@@ -13,10 +13,13 @@ import {
   Platform,
   Alert,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 
 import { useTheme } from '../theme';
 import { AVATAR_EMOJIS, isValidUsername, normalizeProfile, normalizeUsername } from '../profile';
 import ProfileAvatar from './ProfileAvatar';
+
+const MAX_PROFILE_IMAGE_BYTES = 1500 * 1024;
 
 export default function ProfileSheet({
   visible,
@@ -76,37 +79,60 @@ export default function ProfileSheet({
     translateY,
   ]);
 
-  const commitProfile = useCallback((patch = {}) => {
+  const hasProfileChanges = useMemo(
+    () =>
+      draftName.trim() !== resolvedProfile.name ||
+      normalizeUsername(draftUsername) !== resolvedProfile.username ||
+      draftAvatarType !== resolvedProfile.avatarType ||
+      draftAvatarValue !== resolvedProfile.avatarValue,
+    [
+      draftAvatarType,
+      draftAvatarValue,
+      draftName,
+      draftUsername,
+      resolvedProfile.avatarType,
+      resolvedProfile.avatarValue,
+      resolvedProfile.name,
+      resolvedProfile.username,
+    ]
+  );
+
+  const commitProfile = useCallback(() => {
     const next = normalizeProfile({
       ...resolvedProfile,
       name: draftName.trim(),
       username: normalizeUsername(draftUsername),
       avatarType: draftAvatarType,
       avatarValue: draftAvatarValue,
-      ...patch,
     });
     if (!isValidUsername(next.username)) {
       setProfileError('Username must be at least 3 characters.');
       return false;
     }
     setProfileError(null);
-    const changed =
-      next.name !== resolvedProfile.name ||
-      next.username !== resolvedProfile.username ||
-      next.avatarType !== resolvedProfile.avatarType ||
-      next.avatarValue !== resolvedProfile.avatarValue;
-    if (changed) onProfileChange?.(next);
+    if (hasProfileChanges) onProfileChange?.(next);
     return true;
   }, [
     draftAvatarType,
     draftAvatarValue,
     draftName,
     draftUsername,
+    hasProfileChanges,
     onProfileChange,
     resolvedProfile,
   ]);
 
   const closeWithAnimation = useCallback(() => {
+    Animated.timing(translateY, {
+      toValue: screenHeight,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(() => {
+      if (mountedRef.current) onClose?.();
+    });
+  }, [onClose, screenHeight, translateY]);
+
+  const confirmAndClose = useCallback(() => {
     if (!commitProfile()) {
       Animated.spring(translateY, {
         toValue: 0,
@@ -115,14 +141,8 @@ export default function ProfileSheet({
       }).start();
       return;
     }
-    Animated.timing(translateY, {
-      toValue: screenHeight,
-      duration: 200,
-      useNativeDriver: true,
-    }).start(() => {
-      if (mountedRef.current) onClose?.();
-    });
-  }, [commitProfile, onClose, screenHeight, translateY]);
+    closeWithAnimation();
+  }, [closeWithAnimation, commitProfile, translateY]);
 
   const panResponder = useMemo(
     () =>
@@ -160,21 +180,57 @@ export default function ProfileSheet({
   const setAvatar = (avatarType, avatarValue) => {
     setDraftAvatarType(avatarType);
     setDraftAvatarValue(avatarValue);
-    commitProfile({ avatarType, avatarValue });
+    setProfileError(null);
   };
 
-  const handleUploadPress = () => {
+  const updateUsername = (value) => {
+    setDraftUsername(normalizeUsername(value));
+    setProfileError(null);
+  };
+
+  const handleUploadPress = async () => {
     if (Platform.OS === 'web') {
       fileInputRef.current?.click?.();
       return;
     }
-    Alert.alert('Upload image', 'Image upload is available when using SchoolApp on the web.');
+
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert(
+        'Photos permission needed',
+        'Allow photo access to choose a profile picture.'
+      );
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.75,
+      base64: true,
+    });
+    if (result.canceled) return;
+
+    const asset = result.assets?.[0];
+    if (!asset?.base64) {
+      setProfileError('Could not read that image.');
+      return;
+    }
+
+    const mimeType = asset.mimeType || 'image/jpeg';
+    const imageBytes = Math.ceil((asset.base64.length * 3) / 4);
+    if (imageBytes > MAX_PROFILE_IMAGE_BYTES) {
+      setProfileError('Choose an image under 1.5 MB.');
+      return;
+    }
+    setAvatar('image', `data:${mimeType};base64,${asset.base64}`);
   };
 
   const handleWebImageUpload = (event) => {
     const file = event?.target?.files?.[0];
     if (!file) return;
-    if (file.size > 1500 * 1024) {
+    if (file.size > MAX_PROFILE_IMAGE_BYTES) {
       setProfileError('Choose an image under 1.5 MB.');
       event.target.value = '';
       return;
@@ -201,9 +257,14 @@ export default function ProfileSheet({
             <View style={styles.handle} />
             <View style={styles.header}>
               <Text style={styles.title}>Profile</Text>
-              <Pressable onPress={closeWithAnimation} hitSlop={8}>
-                <Text style={styles.doneText}>Done</Text>
-              </Pressable>
+              <View style={styles.headerActions}>
+                <Pressable onPress={closeWithAnimation} hitSlop={8}>
+                  <Text style={styles.doneText}>Cancel</Text>
+                </Pressable>
+                <Pressable onPress={confirmAndClose} hitSlop={8}>
+                  <Text style={[styles.doneText, styles.confirmText]}>Confirm</Text>
+                </Pressable>
+              </View>
             </View>
           </View>
 
@@ -259,8 +320,10 @@ export default function ProfileSheet({
               </View>
               <TextInput
                 value={draftName}
-                onChangeText={setDraftName}
-                onBlur={() => commitProfile()}
+                onChangeText={(value) => {
+                  setDraftName(value);
+                  setProfileError(null);
+                }}
                 placeholder="Enter your name"
                 placeholderTextColor={colors.textFaint}
                 style={styles.input}
@@ -271,8 +334,7 @@ export default function ProfileSheet({
                 <Text style={styles.usernamePrefix}>@</Text>
                 <TextInput
                   value={draftUsername}
-                  onChangeText={(value) => setDraftUsername(normalizeUsername(value))}
-                  onBlur={() => commitProfile()}
+                  onChangeText={updateUsername}
                   placeholder="username"
                   placeholderTextColor={colors.textFaint}
                   style={[styles.input, styles.usernameInput]}
@@ -328,15 +390,25 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       alignItems: 'center',
       paddingHorizontal: spacing.lg,
       paddingVertical: spacing.sm,
+      gap: spacing.md,
+    },
+    headerActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.lg,
     },
     title: {
       ...typography.title,
       fontSize: 22,
+      flex: 1,
     },
     doneText: {
       fontSize: 15,
       fontWeight: '600',
       color: colors.primary,
+    },
+    confirmText: {
+      fontWeight: '800',
     },
     content: {
       paddingHorizontal: spacing.lg,

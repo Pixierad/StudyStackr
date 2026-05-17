@@ -521,17 +521,21 @@ function RoomView({
   onSend,
   scrollRef,
 }) {
+  const [selection, setSelection] = useState({ start: draft.length, end: draft.length });
   const currentUsername = normalizeUsername(profile?.username);
+  const activeMention = getActiveMention(draft, selection.start);
   const mentionOptions = useMemo(
-    () => getMentionOptions(room, userId, draft),
-    [room, userId, draft]
+    () => getMentionOptions(room, userId, activeMention?.query),
+    [room, userId, activeMention?.query]
   );
-  const mentionQuery = getActiveMentionQuery(draft);
-  const showMentions = mentionQuery !== null && mentionOptions.length > 0;
+  const showMentions = !!activeMention && mentionOptions.length > 0;
   const insertMention = (person) => {
     const username = normalizeUsername(person?.username);
-    if (!username) return;
-    setDraft(replaceActiveMention(draft, username));
+    if (!username || !activeMention) return;
+    const next = replaceActiveMention(draft, activeMention, username);
+    const nextCursor = activeMention.start + username.length + 2;
+    setDraft(next);
+    setSelection({ start: nextCursor, end: nextCursor });
   };
 
   return (
@@ -587,6 +591,7 @@ function RoomView({
         <TextInput
           value={draft}
           onChangeText={setDraft}
+          onSelectionChange={(event) => setSelection(event.nativeEvent.selection)}
           placeholder="Message"
           placeholderTextColor={colors.textFaint}
           style={styles.composerInput}
@@ -718,15 +723,24 @@ function MessageBox({ styles, text }) {
   );
 }
 
-function getActiveMentionQuery(value) {
+function getActiveMention(value, cursorPosition) {
   const text = String(value || '');
-  const match = /(?:^|\s)@([a-zA-Z0-9_]*)$/.exec(text);
-  return match ? match[1].toLowerCase() : null;
+  const cursor = Math.max(0, Math.min(Number(cursorPosition ?? text.length), text.length));
+  const beforeCursor = text.slice(0, cursor);
+  const match = /(^|[\s([{])@([a-zA-Z0-9_]*)$/.exec(beforeCursor);
+  if (!match) return null;
+
+  const start = match.index + match[1].length;
+  const query = match[2].toLowerCase();
+  return {
+    query,
+    start,
+    end: cursor,
+  };
 }
 
-function getMentionOptions(room, userId, draft) {
-  const query = getActiveMentionQuery(draft);
-  if (query === null) return [];
+function getMentionOptions(room, userId, query) {
+  if (query == null) return [];
   return (room?.members || [])
     .filter((person) => person.id !== userId && normalizeUsername(person.username))
     .filter((person) => {
@@ -737,9 +751,9 @@ function getMentionOptions(room, userId, draft) {
     .slice(0, 5);
 }
 
-function replaceActiveMention(value, username) {
+function replaceActiveMention(value, activeMention, username) {
   const text = String(value || '');
-  return text.replace(/(^|\s)@([a-zA-Z0-9_]*)$/, `$1@${username} `);
+  return `${text.slice(0, activeMention.start)}@${username} ${text.slice(activeMention.end)}`;
 }
 
 function mentionsUsername(body, username) {
