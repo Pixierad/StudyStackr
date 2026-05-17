@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useCallback, useState, useRef, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -332,6 +332,57 @@ function CustomThemeBuilder({ visible, onClose, onCreate }) {
     builderTranslateYRef.current = new Animated.Value(builderScreenHeight);
   }
   const builderTranslateY = builderTranslateYRef.current;
+  const builderMountedRef = useRef(true);
+
+  useEffect(() => {
+    builderMountedRef.current = true;
+    return () => {
+      builderMountedRef.current = false;
+    };
+  }, []);
+
+  const closeBuilderWithAnimation = useCallback(() => {
+    Animated.timing(builderTranslateY, {
+      toValue: builderScreenHeight,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(() => {
+      if (builderMountedRef.current) onClose?.();
+    });
+  }, [builderScreenHeight, builderTranslateY, onClose]);
+
+  const builderPanResponder = useMemo(
+    () =>
+      PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onStartShouldSetPanResponderCapture: () => false,
+      onMoveShouldSetPanResponder: (_, gs) =>
+        gs.dy > 3 && Math.abs(gs.dy) > Math.abs(gs.dx),
+      onMoveShouldSetPanResponderCapture: (_, gs) =>
+        gs.dy > 3 && Math.abs(gs.dy) > Math.abs(gs.dx),
+      onPanResponderGrant: () => {
+        builderTranslateY.stopAnimation();
+      },
+      onPanResponderMove: (_, gs) => {
+        if (gs.dy > 0) builderTranslateY.setValue(gs.dy);
+      },
+      onPanResponderRelease: (_, gs) => {
+        const dismissed = gs.dy > 100 || gs.vy > 0.5;
+        if (dismissed) {
+          closeBuilderWithAnimation();
+        } else {
+          Animated.spring(builderTranslateY, {
+            toValue: 0,
+            useNativeDriver: true,
+            bounciness: 0,
+          }).start();
+        }
+      },
+      onPanResponderTerminationRequest: () => false,
+      onShouldBlockNativeResponder: () => true,
+    }),
+    [closeBuilderWithAnimation, builderTranslateY]
+  );
 
   useEffect(() => {
     if (visible) {
@@ -356,16 +407,18 @@ function CustomThemeBuilder({ visible, onClose, onCreate }) {
     : { bg: '#F5F6FA', card: '#FFFFFF', text: '#1A1D29', textMuted: '#6B7280', border: '#E5E7EB' };
 
   return (
-    <Modal visible={visible} animationType="none" transparent onRequestClose={onClose}>
+    <Modal visible={visible} animationType="none" transparent onRequestClose={closeBuilderWithAnimation}>
       <View style={styles.builderBackdrop}>
-        <Pressable style={styles.backdropFill} onPress={onClose} />
+        <Pressable style={styles.backdropFill} onPress={closeBuilderWithAnimation} />
         <Animated.View style={[styles.builderSheet, shadow.float, { transform: [{ translateY: builderTranslateY }] }]}>
-          <View style={styles.handle} />
-          <View style={styles.header}>
-            <Text style={styles.title}>New theme</Text>
-            <Pressable onPress={onClose} hitSlop={8}>
-              <Text style={styles.doneText}>Cancel</Text>
-            </Pressable>
+          <View style={styles.dragZone} {...builderPanResponder.panHandlers}>
+            <View style={styles.handle} />
+            <View style={styles.header}>
+              <Text style={styles.title}>New theme</Text>
+              <Pressable onPress={closeBuilderWithAnimation} hitSlop={8}>
+                <Text style={styles.doneText}>Cancel</Text>
+              </Pressable>
+            </View>
           </View>
 
           <ScrollView
@@ -505,7 +558,7 @@ function CustomThemeBuilder({ visible, onClose, onCreate }) {
 
           <View style={styles.builderFooter}>
             <Pressable
-              onPress={onClose}
+              onPress={closeBuilderWithAnimation}
               style={[styles.cancelBtn]}
             >
               <Text style={styles.cancelText}>Cancel</Text>

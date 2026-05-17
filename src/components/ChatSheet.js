@@ -8,6 +8,7 @@ import {
   StyleSheet,
   ScrollView,
   Animated,
+  PanResponder,
   Dimensions,
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -26,7 +27,7 @@ import {
   setChatPinned,
   subscribeToChatRoom,
 } from '../storage';
-import { publicName } from '../profile';
+import { normalizeUsername, publicName } from '../profile';
 import ProfileAvatar from './ProfileAvatar';
 
 const DURATION_OPTIONS = [
@@ -37,7 +38,7 @@ const DURATION_OPTIONS = [
   { label: '7d', hours: 168 },
 ];
 
-export default function ChatSheet({ visible, onClose, session = null }) {
+export default function ChatSheet({ visible, onClose, session = null, profile = null }) {
   const { colors, spacing, radius, typography, shadow } = useTheme();
   const styles = useMemo(
     () => makeStyles({ colors, spacing, radius, typography }),
@@ -66,6 +67,57 @@ export default function ChatSheet({ visible, onClose, session = null }) {
   const messageScrollRef = useRef(null);
   if (translateYRef.current == null) translateYRef.current = new Animated.Value(screenHeight);
   const translateY = translateYRef.current;
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const closeWithAnimation = useCallback(() => {
+    Animated.timing(translateY, {
+      toValue: screenHeight,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(() => {
+      if (mountedRef.current) onClose?.();
+    });
+  }, [onClose, screenHeight, translateY]);
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onStartShouldSetPanResponderCapture: () => false,
+      onMoveShouldSetPanResponder: (_, gs) =>
+        gs.dy > 3 && Math.abs(gs.dy) > Math.abs(gs.dx),
+      onMoveShouldSetPanResponderCapture: (_, gs) =>
+        gs.dy > 3 && Math.abs(gs.dy) > Math.abs(gs.dx),
+      onPanResponderGrant: () => {
+        translateY.stopAnimation();
+      },
+      onPanResponderMove: (_, gs) => {
+        if (gs.dy > 0) translateY.setValue(gs.dy);
+      },
+      onPanResponderRelease: (_, gs) => {
+        const dismissed = gs.dy > 100 || gs.vy > 0.5;
+        if (dismissed) {
+          closeWithAnimation();
+        } else {
+          Animated.spring(translateY, {
+            toValue: 0,
+            useNativeDriver: true,
+            bounciness: 0,
+          }).start();
+        }
+      },
+      onPanResponderTerminationRequest: () => false,
+      onShouldBlockNativeResponder: () => true,
+    }),
+    [closeWithAnimation, translateY]
+  );
 
   const refreshRooms = useCallback(async () => {
     if (!canUseChats) {
@@ -226,37 +278,39 @@ export default function ChatSheet({ visible, onClose, session = null }) {
   };
 
   return (
-    <Modal visible={visible} animationType="none" transparent onRequestClose={onClose}>
+    <Modal visible={visible} animationType="none" transparent onRequestClose={closeWithAnimation}>
       <View style={styles.backdrop}>
-        <Pressable style={styles.backdropFill} onPress={onClose} />
+        <Pressable style={styles.backdropFill} onPress={closeWithAnimation} />
         <Animated.View style={[styles.sheet, shadow.float, { transform: [{ translateY }] }]}>
-          <View style={styles.handle} />
-          <View style={styles.header}>
-            {mode === 'list' ? null : (
-              <Pressable onPress={() => setMode('list')} hitSlop={8} style={styles.headerSide}>
-                <Text style={styles.backText}>Back</Text>
-              </Pressable>
-            )}
-            {mode === 'room' ? (
-              <Pressable
-                onPress={() => setDetailsRoom(activeRoom)}
-                disabled={!activeRoom}
-                style={styles.titleButton}
-                accessibilityRole="button"
-                accessibilityLabel="Show chat details"
-              >
+          <View style={styles.dragZone} {...panResponder.panHandlers}>
+            <View style={styles.handle} />
+            <View style={styles.header}>
+              {mode === 'list' ? null : (
+                <Pressable onPress={() => setMode('list')} hitSlop={8} style={styles.headerSide}>
+                  <Text style={styles.backText}>Back</Text>
+                </Pressable>
+              )}
+              {mode === 'room' ? (
+                <Pressable
+                  onPress={() => setDetailsRoom(activeRoom)}
+                  disabled={!activeRoom}
+                  style={styles.titleButton}
+                  accessibilityRole="button"
+                  accessibilityLabel="Show chat details"
+                >
+                  <Text style={styles.title} numberOfLines={1}>
+                    {roomTitle(activeRoom, userId)}
+                  </Text>
+                </Pressable>
+              ) : (
                 <Text style={styles.title} numberOfLines={1}>
-                  {roomTitle(activeRoom, userId)}
+                  {mode === 'create' ? 'New chat' : 'Chats'}
                 </Text>
+              )}
+              <Pressable onPress={closeWithAnimation} hitSlop={8} style={styles.headerSide}>
+                <Text style={styles.doneText}>Done</Text>
               </Pressable>
-            ) : (
-              <Text style={styles.title} numberOfLines={1}>
-                {mode === 'create' ? 'New chat' : 'Chats'}
-              </Text>
-            )}
-            <Pressable onPress={onClose} hitSlop={8} style={styles.headerSide}>
-              <Text style={styles.doneText}>Done</Text>
-            </Pressable>
+            </View>
           </View>
 
           {!canUseChats ? (
@@ -286,6 +340,7 @@ export default function ChatSheet({ visible, onClose, session = null }) {
               room={activeRoom}
               messages={messages}
               userId={userId}
+              profile={profile}
               draft={draft}
               setDraft={setDraft}
               busy={busy}
@@ -458,6 +513,7 @@ function RoomView({
   room,
   messages,
   userId,
+  profile,
   draft,
   setDraft,
   busy,
@@ -465,6 +521,19 @@ function RoomView({
   onSend,
   scrollRef,
 }) {
+  const currentUsername = normalizeUsername(profile?.username);
+  const mentionOptions = useMemo(
+    () => getMentionOptions(room, userId, draft),
+    [room, userId, draft]
+  );
+  const mentionQuery = getActiveMentionQuery(draft);
+  const showMentions = mentionQuery !== null && mentionOptions.length > 0;
+  const insertMention = (person) => {
+    const username = normalizeUsername(person?.username);
+    if (!username) return;
+    setDraft(replaceActiveMention(draft, username));
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.roomWrap}
@@ -482,12 +551,13 @@ function RoomView({
         ) : null}
         {messages.map((item) => {
           const mine = item.senderId === userId;
+          const mentioned = !mine && mentionsUsername(item.body, currentUsername);
           return (
             <View key={item.id} style={[styles.messageRow, mine && styles.messageRowMine]}>
               {!mine ? <ProfileAvatar profile={item.sender} size={30} /> : null}
-              <View style={[styles.bubble, mine && styles.bubbleMine]}>
+              <View style={[styles.bubble, mentioned && styles.bubbleMentioned, mine && styles.bubbleMine]}>
                 {!mine ? (
-                  <Text style={styles.senderName} numberOfLines={1}>{publicName(item.sender)}</Text>
+                  <Text style={[styles.senderName, mentioned && styles.senderNameMentioned]} numberOfLines={1}>{publicName(item.sender)}</Text>
                 ) : null}
                 <Text style={[styles.messageText, mine && styles.messageTextMine]}>{item.body}</Text>
               </View>
@@ -497,6 +567,23 @@ function RoomView({
       </ScrollView>
       {message ? <MessageBox styles={styles} text={message} /> : null}
       <View style={styles.composer}>
+        {showMentions ? (
+          <View style={styles.mentionPanel}>
+            {mentionOptions.map((person) => (
+              <Pressable
+                key={person.id}
+                onPress={() => insertMention(person)}
+                style={styles.mentionOption}
+              >
+                <ProfileAvatar profile={person} size={28} />
+                <View style={styles.mentionText}>
+                  <Text style={styles.mentionName} numberOfLines={1}>{publicName(person)}</Text>
+                  <Text style={styles.mentionUsername} numberOfLines={1}>@{person.username}</Text>
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
         <TextInput
           value={draft}
           onChangeText={setDraft}
@@ -631,6 +718,36 @@ function MessageBox({ styles, text }) {
   );
 }
 
+function getActiveMentionQuery(value) {
+  const text = String(value || '');
+  const match = /(?:^|\s)@([a-zA-Z0-9_]*)$/.exec(text);
+  return match ? match[1].toLowerCase() : null;
+}
+
+function getMentionOptions(room, userId, draft) {
+  const query = getActiveMentionQuery(draft);
+  if (query === null) return [];
+  return (room?.members || [])
+    .filter((person) => person.id !== userId && normalizeUsername(person.username))
+    .filter((person) => {
+      const username = normalizeUsername(person.username);
+      const name = publicName(person).toLowerCase();
+      return username.includes(query) || name.includes(query);
+    })
+    .slice(0, 5);
+}
+
+function replaceActiveMention(value, username) {
+  const text = String(value || '');
+  return text.replace(/(^|\s)@([a-zA-Z0-9_]*)$/, `$1@${username} `);
+}
+
+function mentionsUsername(body, username) {
+  if (!username) return false;
+  const escaped = username.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(^|[^a-zA-Z0-9_])@${escaped}(?=$|[^a-zA-Z0-9_])`, 'i').test(String(body || ''));
+}
+
 function roomTitle(room, userId = null) {
   if (room?.name?.trim()) return room.name.trim();
   const members = (room?.members || []).filter((member) => member.id !== userId);
@@ -684,6 +801,9 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       height: '88%',
       paddingBottom: spacing.lg,
       overflow: 'hidden',
+    },
+    dragZone: {
+      paddingBottom: spacing.sm,
     },
     handle: {
       alignSelf: 'center',
@@ -999,6 +1119,11 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       paddingHorizontal: spacing.md,
       paddingVertical: spacing.sm,
     },
+    bubbleMentioned: {
+      backgroundColor: colors.primarySoft,
+      borderColor: colors.primary,
+      borderWidth: 2,
+    },
     bubbleMine: {
       backgroundColor: colors.primary,
       borderColor: colors.primary,
@@ -1010,6 +1135,9 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       fontSize: 11,
       fontWeight: '800',
       marginBottom: 2,
+    },
+    senderNameMentioned: {
+      color: colors.primary,
     },
     messageText: {
       color: colors.text,
@@ -1027,6 +1155,42 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       paddingTop: spacing.md,
       borderTopWidth: 1,
       borderTopColor: colors.border,
+      position: 'relative',
+    },
+    mentionPanel: {
+      position: 'absolute',
+      left: spacing.lg,
+      right: spacing.lg,
+      bottom: 56,
+      backgroundColor: colors.card,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: colors.primary,
+      overflow: 'hidden',
+      zIndex: 5,
+    },
+    mentionOption: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      backgroundColor: colors.primarySoft,
+    },
+    mentionText: {
+      flex: 1,
+      minWidth: 0,
+    },
+    mentionName: {
+      color: colors.text,
+      fontSize: 13,
+      fontWeight: '800',
+    },
+    mentionUsername: {
+      color: colors.primary,
+      fontSize: 12,
+      fontWeight: '700',
+      marginTop: 1,
     },
     composerInput: {
       flex: 1,

@@ -17,6 +17,15 @@
 
 export const CHANGELOG = [
   {
+    version: '1.2.3',
+    date: '2026-05-17',
+    title: 'QoL improvements',
+    notes: [
+      'New: You can now ping people in chatrooms by typing @ and their name',
+      'Improvement: some tabs didn\'t support a pull down to close feature, I\'ve added that in for a more consistent experience',
+    ],
+  },
+  {
     version: '1.2.2',
     date: '2026-05-16',
     title: 'CHATROOMS!!!!',

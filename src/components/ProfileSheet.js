@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   StyleSheet,
   ScrollView,
   Animated,
+  PanResponder,
   Dimensions,
   Platform,
   Alert,
@@ -29,7 +30,7 @@ export default function ProfileSheet({
     [colors, spacing, radius, typography]
   );
 
-  const resolvedProfile = normalizeProfile(profile);
+  const resolvedProfile = useMemo(() => normalizeProfile(profile), [profile]);
   const [draftName, setDraftName] = useState(resolvedProfile.name);
   const [draftUsername, setDraftUsername] = useState(resolvedProfile.username);
   const [draftAvatarType, setDraftAvatarType] = useState(resolvedProfile.avatarType);
@@ -41,6 +42,14 @@ export default function ProfileSheet({
   const translateYRef = useRef(null);
   if (translateYRef.current == null) translateYRef.current = new Animated.Value(screenHeight);
   const translateY = translateYRef.current;
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (visible) {
@@ -67,7 +76,7 @@ export default function ProfileSheet({
     translateY,
   ]);
 
-  const commitProfile = (patch = {}) => {
+  const commitProfile = useCallback((patch = {}) => {
     const next = normalizeProfile({
       ...resolvedProfile,
       name: draftName.trim(),
@@ -88,11 +97,65 @@ export default function ProfileSheet({
       next.avatarValue !== resolvedProfile.avatarValue;
     if (changed) onProfileChange?.(next);
     return true;
-  };
+  }, [
+    draftAvatarType,
+    draftAvatarValue,
+    draftName,
+    draftUsername,
+    onProfileChange,
+    resolvedProfile,
+  ]);
 
-  const handleClose = () => {
-    if (commitProfile()) onClose();
-  };
+  const closeWithAnimation = useCallback(() => {
+    if (!commitProfile()) {
+      Animated.spring(translateY, {
+        toValue: 0,
+        useNativeDriver: true,
+        bounciness: 0,
+      }).start();
+      return;
+    }
+    Animated.timing(translateY, {
+      toValue: screenHeight,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(() => {
+      if (mountedRef.current) onClose?.();
+    });
+  }, [commitProfile, onClose, screenHeight, translateY]);
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onStartShouldSetPanResponderCapture: () => false,
+      onMoveShouldSetPanResponder: (_, gs) =>
+        gs.dy > 3 && Math.abs(gs.dy) > Math.abs(gs.dx),
+      onMoveShouldSetPanResponderCapture: (_, gs) =>
+        gs.dy > 3 && Math.abs(gs.dy) > Math.abs(gs.dx),
+      onPanResponderGrant: () => {
+        translateY.stopAnimation();
+      },
+      onPanResponderMove: (_, gs) => {
+        if (gs.dy > 0) translateY.setValue(gs.dy);
+      },
+      onPanResponderRelease: (_, gs) => {
+        const dismissed = gs.dy > 100 || gs.vy > 0.5;
+        if (dismissed) {
+          closeWithAnimation();
+        } else {
+          Animated.spring(translateY, {
+            toValue: 0,
+            useNativeDriver: true,
+            bounciness: 0,
+          }).start();
+        }
+      },
+      onPanResponderTerminationRequest: () => false,
+      onShouldBlockNativeResponder: () => true,
+    }),
+    [closeWithAnimation, translateY]
+  );
 
   const setAvatar = (avatarType, avatarValue) => {
     setDraftAvatarType(avatarType);
@@ -130,16 +193,18 @@ export default function ProfileSheet({
   };
 
   return (
-    <Modal visible={visible} animationType="none" transparent onRequestClose={handleClose}>
+    <Modal visible={visible} animationType="none" transparent onRequestClose={closeWithAnimation}>
       <View style={styles.backdrop}>
-        <Pressable style={styles.backdropFill} onPress={handleClose} />
+        <Pressable style={styles.backdropFill} onPress={closeWithAnimation} />
         <Animated.View style={[styles.sheet, shadow.float, { transform: [{ translateY }] }]}>
-          <View style={styles.handle} />
-          <View style={styles.header}>
-            <Text style={styles.title}>Profile</Text>
-            <Pressable onPress={handleClose} hitSlop={8}>
-              <Text style={styles.doneText}>Done</Text>
-            </Pressable>
+          <View style={styles.dragZone} {...panResponder.panHandlers}>
+            <View style={styles.handle} />
+            <View style={styles.header}>
+              <Text style={styles.title}>Profile</Text>
+              <Pressable onPress={closeWithAnimation} hitSlop={8}>
+                <Text style={styles.doneText}>Done</Text>
+              </Pressable>
+            </View>
           </View>
 
           <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
@@ -244,6 +309,9 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       borderTopRightRadius: radius.xl,
       maxHeight: '88%',
       paddingBottom: spacing.lg,
+    },
+    dragZone: {
+      paddingBottom: spacing.sm,
     },
     handle: {
       alignSelf: 'center',

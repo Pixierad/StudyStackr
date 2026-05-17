@@ -704,6 +704,7 @@ function AppContent() {
         visible={chatsVisible}
         onClose={() => setChatsVisible(false)}
         session={session}
+        profile={profile}
       />
 
       <ChangelogSheet
