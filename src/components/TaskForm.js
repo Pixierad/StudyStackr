@@ -74,16 +74,28 @@ export default function TaskForm({
     }
   }, [visible, translateY, screenHeight]);
 
+  const closeWithAnimation = () => {
+    Animated.timing(translateY, {
+      toValue: screenHeight,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(() => {
+      if (mountedRef.current) onCancel?.();
+    });
+  };
+  const isHeaderDrag = (event, gs) => {
+    const y = event.nativeEvent.locationY ?? 0;
+    return y <= 112 && gs.dy > 2 && Math.abs(gs.dy) > Math.abs(gs.dx);
+  };
+
   // Swipe-down-to-dismiss. Only the drag zone (handle + title area) responds,
   // so the ScrollView below it still scrolls normally.
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onStartShouldSetPanResponderCapture: () => false,
-      onMoveShouldSetPanResponder: (_, gs) =>
-        gs.dy > 3 && Math.abs(gs.dy) > Math.abs(gs.dx),
-      onMoveShouldSetPanResponderCapture: (_, gs) =>
-        gs.dy > 3 && Math.abs(gs.dy) > Math.abs(gs.dx),
+      onMoveShouldSetPanResponder: isHeaderDrag,
+      onMoveShouldSetPanResponderCapture: isHeaderDrag,
       onPanResponderGrant: () => {
         translateY.stopAnimation();
       },
@@ -93,14 +105,7 @@ export default function TaskForm({
       onPanResponderRelease: (_, gs) => {
         const dismissed = gs.dy > 100 || gs.vy > 0.5;
         if (dismissed) {
-          Animated.timing(translateY, {
-            toValue: screenHeight,
-            duration: 200,
-            useNativeDriver: true,
-          }).start(() => {
-            // Skip the callback if we've unmounted in the meantime.
-            if (mountedRef.current) onCancel?.();
-          });
+          closeWithAnimation();
         } else {
           Animated.spring(translateY, {
             toValue: 0,
@@ -162,25 +167,28 @@ export default function TaskForm({
   };
 
   return (
-    <Modal visible={visible} animationType="none" transparent onRequestClose={onCancel}>
+    <Modal visible={visible} animationType="none" transparent onRequestClose={closeWithAnimation}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.backdrop}
       >
-        <Pressable style={styles.backdropFill} onPress={onCancel} />
-        <Animated.View style={[styles.sheet, shadow.float, { transform: [{ translateY }] }]}>
+        <Pressable style={styles.backdropFill} onPress={closeWithAnimation} />
+        <Animated.View
+          style={[styles.sheet, shadow.float, { transform: [{ translateY }] }]}
+        >
           <View style={styles.dragZone} {...panResponder.panHandlers}>
             <View style={styles.handle} />
+            <View style={styles.header}>
+              <Text style={styles.title}>
+                {isEditing ? 'Edit task' : 'New task'}
+              </Text>
+            </View>
           </View>
 
           <ScrollView
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={styles.content}
           >
-            <Text style={styles.title}>
-              {isEditing ? 'Edit task' : 'New task'}
-            </Text>
-
             <View style={styles.field}>
               <Text style={styles.label}>Title</Text>
               <TextInput
@@ -344,7 +352,7 @@ export default function TaskForm({
               <View style={{ flex: 1 }} />
             )}
             <View style={styles.footerRight}>
-              <Pressable onPress={onCancel} style={styles.cancelBtn}>
+              <Pressable onPress={closeWithAnimation} style={styles.cancelBtn}>
                 <Text style={styles.cancelText}>Cancel</Text>
               </Pressable>
               <Pressable onPress={handleSave} style={styles.saveBtn}>
@@ -445,7 +453,7 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
     },
     dragZone: {
       // Big hit area at the top of the sheet for swipe-down-to-dismiss.
-      paddingVertical: spacing.sm,
+      paddingBottom: spacing.sm,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -456,6 +464,11 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       backgroundColor: colors.borderStrong,
       marginTop: spacing.sm,
       marginBottom: spacing.sm,
+    },
+    header: {
+      width: '100%',
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.sm,
     },
     content: {
       padding: spacing.lg,

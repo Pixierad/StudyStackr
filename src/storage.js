@@ -738,6 +738,12 @@ export async function loadFriends() {
   }
 }
 
+export async function loadCachedFriends() {
+  const uid = await cloudMode();
+  if (!uid) return [];
+  return readLocalArray(`@simpleapp:friends:${uid}:v1`);
+}
+
 export async function loadFriendRequests() {
   const uid = await cloudMode();
   if (!uid) return { incoming: [], outgoing: [] };
@@ -765,6 +771,15 @@ export async function loadFriendRequests() {
       { incoming: [], outgoing: [] }
     );
   }
+}
+
+export async function loadCachedFriendRequests() {
+  const uid = await cloudMode();
+  if (!uid) return { incoming: [], outgoing: [] };
+  return (
+    (await readLocalObject(`@simpleapp:friendRequests:${uid}:v1`)) ||
+    { incoming: [], outgoing: [] }
+  );
 }
 
 export async function addFriend(friendId) {
@@ -825,18 +840,26 @@ function rowToChatRoom(row) {
     lastMessageAt: row.last_message_at ?? null,
     unreadCount: Number(row.unread_count ?? 0),
     members: Array.isArray(row.members)
-      ? row.members.map((m) => rowToProfile(m, m?.id))
+      ? row.members.map((m) => ({
+          ...rowToProfile(m, m?.id),
+          isFriend: !!m?.is_friend,
+          incomingRequest: !!m?.incoming_request,
+          outgoingRequest: !!m?.outgoing_request,
+        }))
       : [],
   };
 }
 
 function rowToChatMessage(row) {
+  const messageType = row.message_type ?? row.kind ?? 'message';
   return {
     id: row.id,
     roomId: row.room_id,
     senderId: row.sender_id,
     body: row.body ?? '',
     createdAt: row.created_at ?? null,
+    type: messageType,
+    isSystem: messageType === 'system',
     sender: rowToProfile(
       {
         id: row.sender_id,
@@ -866,6 +889,12 @@ export async function loadChatRooms() {
   }
 }
 
+export async function loadCachedChatRooms() {
+  const uid = await cloudMode();
+  if (!uid) return [];
+  return readLocalArray(chatRoomsKey(uid));
+}
+
 export async function createChatRoom({ name, friendIds, lifetimeHours }) {
   const uid = await cloudMode();
   if (!uid) throw new Error('Sign in to create chats.');
@@ -876,6 +905,26 @@ export async function createChatRoom({ name, friendIds, lifetimeHours }) {
   });
   if (error) throw error;
   return data;
+}
+
+export async function renameChatRoom(roomId, name) {
+  const uid = await cloudMode();
+  if (!uid || !roomId) return;
+  const { error } = await supabase.rpc('rename_chat_room', {
+    room_profile_id: roomId,
+    room_name: String(name || '').trim(),
+  });
+  if (error) throw error;
+}
+
+export async function addChatParticipants(roomId, friendIds) {
+  const uid = await cloudMode();
+  if (!uid || !roomId) return;
+  const { error } = await supabase.rpc('add_chat_participants', {
+    room_profile_id: roomId,
+    friend_ids: Array.isArray(friendIds) ? friendIds : [],
+  });
+  if (error) throw error;
 }
 
 export async function loadChatMessages(roomId) {
@@ -894,6 +943,12 @@ export async function loadChatMessages(roomId) {
     console.warn('Supabase loadChatMessages failed, falling back to cache:', e?.message);
     return readLocalArray(chatMessagesKey(uid, roomId));
   }
+}
+
+export async function loadCachedChatMessages(roomId) {
+  const uid = await cloudMode();
+  if (!uid || !roomId) return [];
+  return readLocalArray(chatMessagesKey(uid, roomId));
 }
 
 export async function sendChatMessage(roomId, body) {

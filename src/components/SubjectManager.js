@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -66,14 +66,27 @@ export default function SubjectManager({
     }
   }, [visible, translateY, screenHeight]);
 
-  const panResponder = useRef(
-    PanResponder.create({
+  const closeWithAnimation = useCallback(() => {
+    Animated.timing(translateY, {
+      toValue: screenHeight,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(() => {
+      if (mountedRef.current) onClose?.();
+    });
+  }, [onClose, screenHeight, translateY]);
+  const isHeaderDrag = (event, gs) => {
+    const y = event.nativeEvent.locationY ?? 0;
+    return y <= 112 && gs.dy > 2 && Math.abs(gs.dy) > Math.abs(gs.dx);
+  };
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onStartShouldSetPanResponderCapture: () => false,
-      onMoveShouldSetPanResponder: (_, gs) =>
-        gs.dy > 3 && Math.abs(gs.dy) > Math.abs(gs.dx),
-      onMoveShouldSetPanResponderCapture: (_, gs) =>
-        gs.dy > 3 && Math.abs(gs.dy) > Math.abs(gs.dx),
+      onMoveShouldSetPanResponder: isHeaderDrag,
+      onMoveShouldSetPanResponderCapture: isHeaderDrag,
       onPanResponderGrant: () => {
         translateY.stopAnimation();
       },
@@ -83,13 +96,7 @@ export default function SubjectManager({
       onPanResponderRelease: (_, gs) => {
         const dismissed = gs.dy > 100 || gs.vy > 0.5;
         if (dismissed) {
-          Animated.timing(translateY, {
-            toValue: screenHeight,
-            duration: 200,
-            useNativeDriver: true,
-          }).start(() => {
-            if (mountedRef.current) onClose?.();
-          });
+          closeWithAnimation();
         } else {
           Animated.spring(translateY, {
             toValue: 0,
@@ -100,8 +107,9 @@ export default function SubjectManager({
       },
       onPanResponderTerminationRequest: () => false,
       onShouldBlockNativeResponder: () => true,
-    })
-  ).current;
+    }),
+    [closeWithAnimation, translateY]
+  );
 
   const handleSaveSubject = (next) => {
     const previousName =
@@ -109,7 +117,7 @@ export default function SubjectManager({
     const name = (next.name || '').trim();
     if (!name) {
       Alert.alert('Missing name', 'Subject needs a name.');
-      return;
+      return false;
     }
     const dup = subjects.some(
       (s, i) =>
@@ -118,7 +126,7 @@ export default function SubjectManager({
     );
     if (dup) {
       Alert.alert('Already exists', `"${name}" is already in your subjects.`);
-      return;
+      return false;
     }
 
     const cleaned = {
@@ -134,7 +142,7 @@ export default function SubjectManager({
     } else {
       onChange([...subjects, cleaned]);
     }
-    setEditing(null);
+    return true;
   };
 
   const remove = (index) => {
@@ -162,12 +170,12 @@ export default function SubjectManager({
   };
 
   return (
-    <Modal visible={visible} animationType="none" transparent onRequestClose={onClose}>
+    <Modal visible={visible} animationType="none" transparent onRequestClose={closeWithAnimation}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.backdrop}
       >
-        <Pressable style={styles.backdropFill} onPress={onClose} />
+        <Pressable style={styles.backdropFill} onPress={closeWithAnimation} />
         <Animated.View
           style={[styles.sheet, shadow.float, { transform: [{ translateY }] }]}
         >
@@ -175,7 +183,7 @@ export default function SubjectManager({
             <View style={styles.handle} />
             <View style={styles.header}>
               <Text style={styles.title}>Subjects</Text>
-              <Pressable onPress={onClose} hitSlop={8}>
+              <Pressable onPress={closeWithAnimation} hitSlop={8}>
                 <Text style={styles.doneText}>Done</Text>
               </Pressable>
             </View>
@@ -273,6 +281,18 @@ function SubjectEditor({ visible, isNew, initial, onCancel, onSave }) {
   const [room, setRoom] = useState('');
   const [teacher, setTeacher] = useState('');
   const [color, setColor] = useState(null);
+  const screenHeight = Dimensions.get('window').height;
+  const translateYRef = useRef(null);
+  if (translateYRef.current == null) translateYRef.current = new Animated.Value(screenHeight);
+  const translateY = translateYRef.current;
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (visible) {
@@ -280,25 +300,83 @@ function SubjectEditor({ visible, isNew, initial, onCancel, onSave }) {
       setRoom(initial?.room ?? '');
       setTeacher(initial?.teacher ?? '');
       setColor(initial?.color ?? null);
+      translateY.setValue(screenHeight);
+      Animated.spring(translateY, {
+        toValue: 0,
+        useNativeDriver: true,
+        bounciness: 0,
+        speed: 20,
+      }).start();
     }
-  }, [visible, initial]);
+  }, [visible, initial, screenHeight, translateY]);
 
-  const submit = () => onSave({ name, room, teacher, color });
+  const closeWithAnimation = useCallback(() => {
+    Animated.timing(translateY, {
+      toValue: screenHeight,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(() => {
+      if (mountedRef.current) onCancel?.();
+    });
+  }, [onCancel, screenHeight, translateY]);
+  const isHeaderDrag = (event, gs) => {
+    const y = event.nativeEvent.locationY ?? 0;
+    return y <= 112 && gs.dy > 2 && Math.abs(gs.dy) > Math.abs(gs.dx);
+  };
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onStartShouldSetPanResponderCapture: () => false,
+      onMoveShouldSetPanResponder: isHeaderDrag,
+      onMoveShouldSetPanResponderCapture: isHeaderDrag,
+      onPanResponderGrant: () => {
+        translateY.stopAnimation();
+      },
+      onPanResponderMove: (_, gs) => {
+        if (gs.dy > 0) translateY.setValue(gs.dy);
+      },
+      onPanResponderRelease: (_, gs) => {
+        const dismissed = gs.dy > 100 || gs.vy > 0.5;
+        if (dismissed) {
+          closeWithAnimation();
+        } else {
+          Animated.spring(translateY, {
+            toValue: 0,
+            useNativeDriver: true,
+            bounciness: 0,
+          }).start();
+        }
+      },
+      onPanResponderTerminationRequest: () => false,
+      onShouldBlockNativeResponder: () => true,
+    }),
+    [closeWithAnimation, translateY]
+  );
+
+  const submit = () => {
+    if (onSave({ name, room, teacher, color }) !== false) closeWithAnimation();
+  };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onCancel}>
+    <Modal visible={visible} animationType="none" transparent onRequestClose={closeWithAnimation}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.editorBackdrop}
       >
-        <Pressable style={styles.backdropFill} onPress={onCancel} />
-        <View style={[styles.editorSheet, shadow.float]}>
-          <View style={styles.handle} />
-          <View style={styles.header}>
-            <Text style={styles.title}>{isNew ? 'New subject' : 'Edit subject'}</Text>
-            <Pressable onPress={onCancel} hitSlop={8}>
-              <Text style={styles.doneText}>Cancel</Text>
-            </Pressable>
+        <Pressable style={styles.backdropFill} onPress={closeWithAnimation} />
+        <Animated.View
+          style={[styles.editorSheet, shadow.float, { transform: [{ translateY }] }]}
+        >
+          <View style={styles.dragZone} {...panResponder.panHandlers}>
+            <View style={styles.handle} />
+            <View style={styles.header}>
+              <Text style={styles.title}>{isNew ? 'New subject' : 'Edit subject'}</Text>
+              <Pressable onPress={closeWithAnimation} hitSlop={8}>
+                <Text style={styles.doneText}>Cancel</Text>
+              </Pressable>
+            </View>
           </View>
 
           <ScrollView
@@ -380,14 +458,14 @@ function SubjectEditor({ visible, isNew, initial, onCancel, onSave }) {
           </ScrollView>
 
           <View style={styles.editorFooter}>
-            <Pressable onPress={onCancel} style={styles.cancelBtn}>
+            <Pressable onPress={closeWithAnimation} style={styles.cancelBtn}>
               <Text style={styles.cancelText}>Cancel</Text>
             </Pressable>
             <Pressable onPress={submit} style={styles.saveBtn}>
               <Text style={styles.saveText}>{isNew ? 'Add subject' : 'Save'}</Text>
             </Pressable>
           </View>
-        </View>
+        </Animated.View>
       </KeyboardAvoidingView>
     </Modal>
   );

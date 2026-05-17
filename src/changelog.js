@@ -22,13 +22,19 @@ export const CHANGELOG = [
     title: 'QoL improvements',
     notes: [
       'New: You can now ping people in chatrooms by typing @ and their name',
-      'Improvement: some tabs didn\'t support a pull down to close feature, I\'ve added that in for a more consistent experience',
+      'Improvement: some tabs didn\'t support a pull down to close feature; I\'ve added that in for a more consistent experience',
+      'Improvement: Changed settings and chats into full screen windows meaning more space to read and write messages.',
+      'Improvement: You can now edit chatrooms for better organisation and clarity.',
+      'Improvement: Chatrooms now have system messages for admin actions',
+      'Improvement: Improved chatroom member management',
+      'Improvement: Added static pages for redundant scrolling sheets',
+      'Fixed: minor UI glitches in the chat interface',
     ],
   },
   {
     version: '1.2.2',
     date: '2026-05-16',
-    title: 'CHATROOMS!!!!',
+    title: 'Better socialising',
     notes: [
       'New: Notifications: Get notified when friends come online or join chatrooms',
       'Improvement: Accept or deny friend requests',
@@ -38,7 +44,7 @@ export const CHANGELOG = [
   {
     version: '1.2.1',
     date: '2026-05-15',
-    title: 'CHATROOMS!!!!',
+    title: 'Chatrooms',
     notes: [
       'New: Temporary chatrooms for real-time collaboration with friends',
       'Improvement: Friends tab now shows online status',
@@ -58,7 +64,7 @@ export const CHANGELOG = [
   },
   {
     version: '1.1.0 (PATCH)',
-    date: '25-4-2026',
+    date: '2026-04-25',
     title: 'Hotfix: deployment rejection fixed',
     notes: [
       'Fixed an issue where Vercel would reject the latest deployment due to no SSH key for the repo (my bad).',
@@ -67,7 +73,7 @@ export const CHANGELOG = [
   },
   {
     version: '1.1.0',
-    date: '25-4-2026',
+    date: '2026-04-25',
     title: 'Reliability pass and What\'s new',
     notes: [
       'New: "What\'s new" panel — see recent improvements from the Settings sheet.',
@@ -81,7 +87,7 @@ export const CHANGELOG = [
   },
   {
     version: '1.0.0',
-    date: '30-3-2026',
+    date: '2026-04-20',
     title: 'Initial public release',
     notes: [
       'New: tasks with due dates, subjects, and progress tracking.',

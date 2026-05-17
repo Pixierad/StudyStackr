@@ -19,6 +19,8 @@ import {
   acceptFriendRequest,
   addFriend,
   declineFriendRequest,
+  loadCachedFriendRequests,
+  loadCachedFriends,
   loadFriendRequests,
   loadFriends,
   removeFriend,
@@ -66,16 +68,18 @@ export default function FriendsSheet({ visible, onClose, session = null }) {
       if (mountedRef.current) onClose?.();
     });
   }, [onClose, screenHeight, translateY]);
+  const isHeaderDrag = (event, gs) => {
+    const y = event.nativeEvent.locationY ?? 0;
+    return y <= 112 && gs.dy > 2 && Math.abs(gs.dy) > Math.abs(gs.dx);
+  };
 
   const panResponder = useMemo(
     () =>
       PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onStartShouldSetPanResponderCapture: () => false,
-      onMoveShouldSetPanResponder: (_, gs) =>
-        gs.dy > 3 && Math.abs(gs.dy) > Math.abs(gs.dx),
-      onMoveShouldSetPanResponderCapture: (_, gs) =>
-        gs.dy > 3 && Math.abs(gs.dy) > Math.abs(gs.dx),
+      onMoveShouldSetPanResponder: isHeaderDrag,
+      onMoveShouldSetPanResponderCapture: isHeaderDrag,
       onPanResponderGrant: () => {
         translateY.stopAnimation();
       },
@@ -123,7 +127,19 @@ export default function FriendsSheet({ visible, onClose, session = null }) {
       return;
     }
     let cancelled = false;
-    setLoadingFriends(true);
+    setLoadingFriends(friends.length === 0);
+    Promise.all([loadCachedFriends(), loadCachedFriendRequests()])
+      .then(([cachedFriends, cachedRequests]) => {
+        if (cancelled) return;
+        if (cachedFriends.length > 0) {
+          setFriends(cachedFriends);
+          setLoadingFriends(false);
+        }
+        if (cachedRequests.incoming.length > 0 || cachedRequests.outgoing.length > 0) {
+          setRequests(cachedRequests);
+        }
+      })
+      .catch(() => {});
     Promise.all([loadFriends(), loadFriendRequests()])
       .then(([friendItems, requestItems]) => {
         if (cancelled) return;
@@ -276,7 +292,9 @@ export default function FriendsSheet({ visible, onClose, session = null }) {
     <Modal visible={visible} animationType="none" transparent onRequestClose={closeWithAnimation}>
       <View style={styles.backdrop}>
         <Pressable style={styles.backdropFill} onPress={closeWithAnimation} />
-        <Animated.View style={[styles.sheet, shadow.float, { transform: [{ translateY }] }]}>
+        <Animated.View
+          style={[styles.sheet, shadow.float, { transform: [{ translateY }] }]}
+        >
           <View style={styles.dragZone} {...panResponder.panHandlers}>
             <View style={styles.handle} />
             <View style={styles.header}>
@@ -287,7 +305,7 @@ export default function FriendsSheet({ visible, onClose, session = null }) {
             </View>
           </View>
 
-          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          <View style={styles.content}>
             {!canUseFriends ? (
               <View style={styles.notice}>
                 <Text style={styles.noticeTitle}>Friend search needs an account</Text>
@@ -314,16 +332,25 @@ export default function FriendsSheet({ visible, onClose, session = null }) {
                       <Text style={styles.errorText}>{message}</Text>
                     </View>
                   ) : null}
-                  {results.map((person) => (
-                    <SearchResultRow
-                      key={person.id}
-                      person={person}
-                      busy={busyId === person.id}
-                      onAdd={() => handleAdd(person)}
-                      onAccept={() => handleAccept(person)}
-                      styles={styles}
-                    />
-                  ))}
+                  {results.length > 0 ? (
+                    <ScrollView
+                      style={styles.compactListFrame}
+                      contentContainerStyle={styles.listFrameContent}
+                      nestedScrollEnabled
+                      keyboardShouldPersistTaps="handled"
+                    >
+                      {results.map((person) => (
+                        <SearchResultRow
+                          key={person.id}
+                          person={person}
+                          busy={busyId === person.id}
+                          onAdd={() => handleAdd(person)}
+                          onAccept={() => handleAccept(person)}
+                          styles={styles}
+                        />
+                      ))}
+                    </ScrollView>
+                  ) : null}
                   {query.trim().length >= 2 && !searching && results.length === 0 ? (
                     <Text style={styles.emptyText}>No matching profiles yet.</Text>
                   ) : null}
@@ -332,56 +359,76 @@ export default function FriendsSheet({ visible, onClose, session = null }) {
                 {requests.incoming.length > 0 ? (
                   <View style={styles.section}>
                     <Text style={styles.sectionLabel}>Friend requests</Text>
-                    {requests.incoming.map((person) => (
-                      <FriendRequestRow
-                        key={person.id}
-                        person={person}
-                        busy={busyId === person.id}
-                        onAccept={() => handleAccept(person)}
-                        onDecline={() => handleDecline(person)}
-                        styles={styles}
-                      />
-                    ))}
-                  </View>
-                ) : null}
-
-                {requests.outgoing.length > 0 ? (
-                  <View style={styles.section}>
-                    <Text style={styles.sectionLabel}>Sent requests</Text>
-                    {requests.outgoing.map((person) => (
-                      <FriendRow
-                        key={person.id}
-                        person={person}
-                        busy={busyId === person.id}
-                        actionLabel="Requested"
-                        disabled
-                        styles={styles}
-                      />
-                    ))}
+                    <ScrollView
+                      style={styles.compactListFrame}
+                      contentContainerStyle={styles.listFrameContent}
+                      nestedScrollEnabled
+                    >
+                      {requests.incoming.map((person) => (
+                        <FriendRequestRow
+                          key={person.id}
+                          person={person}
+                          busy={busyId === person.id}
+                          onAccept={() => handleAccept(person)}
+                          onDecline={() => handleDecline(person)}
+                          styles={styles}
+                        />
+                      ))}
+                    </ScrollView>
                   </View>
                 ) : null}
 
                 <View style={styles.section}>
-                  <Text style={styles.sectionLabel}>Your friends</Text>
-                  {loadingFriends ? <ActivityIndicator color={colors.primary} /> : null}
-                  {!loadingFriends && friends.length === 0 ? (
-                    <Text style={styles.emptyText}>Friends you add will show up here.</Text>
-                  ) : null}
-                  {friends.map((person) => (
-                    <FriendRow
-                      key={person.id}
-                      person={person}
-                      busy={busyId === person.id}
-                      actionLabel="Remove"
-                      danger
-                      onPress={() => handleRemove(person)}
-                      styles={styles}
-                    />
-                  ))}
+                  <Text style={styles.sectionLabel}>Requests sent</Text>
+                  <ScrollView
+                    style={styles.listFrame}
+                    contentContainerStyle={styles.listFrameContent}
+                    nestedScrollEnabled
+                  >
+                    {requests.outgoing.length === 0 ? (
+                      <Text style={styles.emptyText}>Requests you send will show up here.</Text>
+                    ) : (
+                      requests.outgoing.map((person) => (
+                        <FriendRow
+                          key={person.id}
+                          person={person}
+                          busy={busyId === person.id}
+                          actionLabel="Requested"
+                          disabled
+                          styles={styles}
+                        />
+                      ))
+                    )}
+                  </ScrollView>
+                </View>
+
+                <View style={styles.section}>
+                  <Text style={styles.sectionLabel}>Friends</Text>
+                  <ScrollView
+                    style={styles.listFrame}
+                    contentContainerStyle={styles.listFrameContent}
+                    nestedScrollEnabled
+                  >
+                    {loadingFriends ? <ActivityIndicator color={colors.primary} /> : null}
+                    {!loadingFriends && friends.length === 0 ? (
+                      <Text style={styles.emptyText}>Friends you add will show up here.</Text>
+                    ) : null}
+                    {friends.map((person) => (
+                      <FriendRow
+                        key={person.id}
+                        person={person}
+                        busy={busyId === person.id}
+                        actionLabel="Remove"
+                        danger
+                        onPress={() => handleRemove(person)}
+                        styles={styles}
+                      />
+                    ))}
+                  </ScrollView>
                 </View>
               </>
             )}
-          </ScrollView>
+          </View>
         </Animated.View>
       </View>
     </Modal>
@@ -544,7 +591,8 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
     content: {
       paddingHorizontal: spacing.lg,
       paddingBottom: spacing.xl,
-      gap: spacing.xl,
+      gap: spacing.lg,
+      flexShrink: 1,
     },
     section: {
       gap: spacing.sm,
@@ -591,6 +639,25 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
     emptyText: {
       ...typography.bodyMuted,
       paddingVertical: spacing.sm,
+    },
+    listFrame: {
+      maxHeight: 230,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.cardMuted,
+    },
+    compactListFrame: {
+      maxHeight: 148,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.cardMuted,
+    },
+    listFrameContent: {
+      padding: spacing.sm,
+      gap: spacing.sm,
+      flexGrow: 1,
     },
     friendRow: {
       flexDirection: 'row',

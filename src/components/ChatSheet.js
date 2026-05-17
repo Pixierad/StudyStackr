@@ -7,9 +7,6 @@ import {
   Modal,
   StyleSheet,
   ScrollView,
-  Animated,
-  PanResponder,
-  Dimensions,
   ActivityIndicator,
   KeyboardAvoidingView,
   Keyboard,
@@ -18,12 +15,18 @@ import {
 
 import { useTheme } from '../theme';
 import {
+  addChatParticipants,
+  addFriend,
   createChatRoom,
   hideChatRoom,
+  loadCachedChatMessages,
+  loadCachedChatRooms,
+  loadCachedFriends,
   loadChatMessages,
   loadChatRooms,
   loadFriends,
   markChatRead,
+  renameChatRoom,
   sendChatMessage,
   setChatPinned,
   subscribeToChatRoom,
@@ -44,9 +47,11 @@ const COMPOSER_INPUT_VERTICAL_PADDING = 16;
 const COMPOSER_INPUT_MAX_LINES = 6;
 const COMPOSER_INPUT_MAX_HEIGHT =
   COMPOSER_INPUT_LINE_HEIGHT * COMPOSER_INPUT_MAX_LINES + COMPOSER_INPUT_VERTICAL_PADDING;
+const COMPOSER_INPUT_FONT_SIZE = 15;
+const COMPOSER_INPUT_AVERAGE_CHAR_WIDTH = 7.1;
 
 export default function ChatSheet({ visible, onClose, session = null, profile = null }) {
-  const { colors, spacing, radius, typography, shadow } = useTheme();
+  const { colors, spacing, radius, typography } = useTheme();
   const styles = useMemo(
     () => makeStyles({ colors, spacing, radius, typography }),
     [colors, spacing, radius, typography]
@@ -69,62 +74,7 @@ export default function ChatSheet({ visible, onClose, session = null, profile = 
 
   const canUseChats = !!session;
   const userId = session?.user?.id ?? null;
-  const screenHeight = Dimensions.get('window').height;
-  const translateYRef = useRef(null);
   const messageScrollRef = useRef(null);
-  if (translateYRef.current == null) translateYRef.current = new Animated.Value(screenHeight);
-  const translateY = translateYRef.current;
-  const mountedRef = useRef(true);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
-
-  const closeWithAnimation = useCallback(() => {
-    Animated.timing(translateY, {
-      toValue: screenHeight,
-      duration: 200,
-      useNativeDriver: true,
-    }).start(() => {
-      if (mountedRef.current) onClose?.();
-    });
-  }, [onClose, screenHeight, translateY]);
-
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onStartShouldSetPanResponderCapture: () => false,
-      onMoveShouldSetPanResponder: (_, gs) =>
-        gs.dy > 3 && Math.abs(gs.dy) > Math.abs(gs.dx),
-      onMoveShouldSetPanResponderCapture: (_, gs) =>
-        gs.dy > 3 && Math.abs(gs.dy) > Math.abs(gs.dx),
-      onPanResponderGrant: () => {
-        translateY.stopAnimation();
-      },
-      onPanResponderMove: (_, gs) => {
-        if (gs.dy > 0) translateY.setValue(gs.dy);
-      },
-      onPanResponderRelease: (_, gs) => {
-        const dismissed = gs.dy > 100 || gs.vy > 0.5;
-        if (dismissed) {
-          closeWithAnimation();
-        } else {
-          Animated.spring(translateY, {
-            toValue: 0,
-            useNativeDriver: true,
-            bounciness: 0,
-          }).start();
-        }
-      },
-      onPanResponderTerminationRequest: () => false,
-      onShouldBlockNativeResponder: () => true,
-    }),
-    [closeWithAnimation, translateY]
-  );
 
   const refreshRooms = useCallback(async () => {
     if (!canUseChats) {
@@ -146,17 +96,6 @@ export default function ChatSheet({ visible, onClose, session = null, profile = 
 
   useEffect(() => {
     if (!visible) return;
-    translateY.setValue(screenHeight);
-    Animated.spring(translateY, {
-      toValue: 0,
-      useNativeDriver: true,
-      bounciness: 0,
-      speed: 20,
-    }).start();
-  }, [visible, translateY, screenHeight]);
-
-  useEffect(() => {
-    if (!visible) return;
     setMode('list');
     setActiveRoom(null);
     setDetailsRoom(null);
@@ -166,7 +105,17 @@ export default function ChatSheet({ visible, onClose, session = null, profile = 
     if (!canUseChats) return;
 
     let cancelled = false;
-    setLoading(true);
+    setLoading(rooms.length === 0);
+    Promise.all([loadCachedChatRooms(), loadCachedFriends()])
+      .then(([cachedRooms, cachedFriends]) => {
+        if (cancelled) return;
+        if (cachedRooms.length > 0) {
+          setRooms(cachedRooms);
+          setLoading(false);
+        }
+        if (cachedFriends.length > 0) setFriends(cachedFriends);
+      })
+      .catch(() => {});
     Promise.all([loadChatRooms(), loadFriends()])
       .then(([roomItems, friendItems]) => {
         if (cancelled) return;
@@ -208,6 +157,14 @@ export default function ChatSheet({ visible, onClose, session = null, profile = 
     setDraft('');
     setMessage(null);
     setMode('room');
+    loadCachedChatMessages(room.id)
+      .then((cachedMessages) => {
+        if (cachedMessages.length > 0) {
+          setMessages(cachedMessages);
+          setTimeout(() => messageScrollRef.current?.scrollToEnd?.({ animated: false }), 50);
+        }
+      })
+      .catch(() => {});
   };
 
   const toggleFriend = (id) => {
@@ -284,19 +241,83 @@ export default function ChatSheet({ visible, onClose, session = null, profile = 
     }
   };
 
+  const replaceRoom = (nextRoom) => {
+    if (!nextRoom?.id) return;
+    setRooms((prev) => prev.map((room) => (room.id === nextRoom.id ? nextRoom : room)));
+    setActiveRoom((prev) => (prev?.id === nextRoom.id ? nextRoom : prev));
+    setDetailsRoom((prev) => (prev?.id === nextRoom.id ? nextRoom : prev));
+  };
+
+  const refreshRoomById = async (roomId) => {
+    const nextRooms = await refreshRooms();
+    const nextRoom = nextRooms.find((room) => room.id === roomId);
+    if (nextRoom) replaceRoom(nextRoom);
+    return nextRoom;
+  };
+
+  const handleRenameRoom = async (room, nextName) => {
+    const name = String(nextName || '').trim();
+    if (!room?.id || busy) return;
+    const optimisticRoom = { ...room, name };
+    replaceRoom(optimisticRoom);
+    setBusy(true);
+    setMessage(null);
+    try {
+      await renameChatRoom(room.id, name);
+      await refreshRoomById(room.id);
+      if (activeRoom?.id === room.id) await refreshMessages(room.id);
+    } catch (e) {
+      setMessage(e?.message || 'Could not rename chat.');
+      await refreshRoomById(room.id).catch(() => {});
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleAddParticipants = async (room, friendIds) => {
+    if (!room?.id || !Array.isArray(friendIds) || friendIds.length === 0 || busy) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      await addChatParticipants(room.id, friendIds);
+      await refreshRoomById(room.id);
+      if (activeRoom?.id === room.id) await refreshMessages(room.id);
+    } catch (e) {
+      setMessage(e?.message || 'Could not add people to this chat.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleRequestFriend = async (person) => {
+    if (!person?.id || person.id === userId || busy) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      await addFriend(person.id);
+      const nextFriends = await loadFriends();
+      setFriends(nextFriends);
+      if (detailsRoom?.id) await refreshRoomById(detailsRoom.id);
+    } catch (e) {
+      setMessage(e?.message || 'Could not send friend request.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <Modal visible={visible} animationType="none" transparent onRequestClose={closeWithAnimation}>
-      <View style={styles.backdrop}>
-        <Pressable style={styles.backdropFill} onPress={closeWithAnimation} />
-        <Animated.View style={[styles.sheet, shadow.float, { transform: [{ translateY }] }]}>
-          <View style={styles.dragZone} {...panResponder.panHandlers}>
-            <View style={styles.handle} />
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose} presentationStyle="fullScreen">
+      <View style={styles.screen}>
+        <View style={styles.chatWindow}>
+          <View style={[styles.windowHeader, mode === 'create' && styles.windowHeaderPlain]}>
             <View style={styles.header}>
-              {mode === 'list' ? null : (
-                <Pressable onPress={() => setMode('list')} hitSlop={8} style={styles.headerSide}>
-                  <Text style={styles.backText}>Back</Text>
-                </Pressable>
-              )}
+              <Pressable
+                onPress={mode === 'list' ? onClose : () => setMode('list')}
+                hitSlop={8}
+                style={styles.headerSide}
+              >
+                <Text style={styles.backText}>Back</Text>
+              </Pressable>
               {mode === 'room' ? (
                 <Pressable
                   onPress={() => setDetailsRoom(activeRoom)}
@@ -305,8 +326,11 @@ export default function ChatSheet({ visible, onClose, session = null, profile = 
                   accessibilityRole="button"
                   accessibilityLabel="Show chat details"
                 >
-                  <Text style={styles.title} numberOfLines={1}>
+                  <Text style={styles.roomTitle} numberOfLines={1}>
                     {roomTitle(activeRoom, userId)}
+                  </Text>
+                  <Text style={styles.headerExpiryText} numberOfLines={1}>
+                    {expiresText(activeRoom?.expiresAt)}
                   </Text>
                 </Pressable>
               ) : (
@@ -314,9 +338,7 @@ export default function ChatSheet({ visible, onClose, session = null, profile = 
                   {mode === 'create' ? 'New chat' : 'Chats'}
                 </Text>
               )}
-              <Pressable onPress={closeWithAnimation} hitSlop={8} style={styles.headerSide}>
-                <Text style={styles.doneText}>Done</Text>
-              </Pressable>
+              <View style={styles.headerSide} />
             </View>
           </View>
 
@@ -344,6 +366,7 @@ export default function ChatSheet({ visible, onClose, session = null, profile = 
             <RoomView
               styles={styles}
               colors={colors}
+              spacing={spacing}
               room={activeRoom}
               messages={messages}
               userId={userId}
@@ -367,7 +390,7 @@ export default function ChatSheet({ visible, onClose, session = null, profile = 
               onLongPress={setActionRoom}
             />
           )}
-        </Animated.View>
+        </View>
 
         {actionRoom ? (
           <ActionPanel
@@ -384,6 +407,11 @@ export default function ChatSheet({ visible, onClose, session = null, profile = 
             styles={styles}
             room={detailsRoom}
             userId={userId}
+            friends={friends}
+            busy={busy}
+            onRename={handleRenameRoom}
+            onAddParticipants={handleAddParticipants}
+            onRequestFriend={handleRequestFriend}
             onClose={() => setDetailsRoom(null)}
           />
         ) : null}
@@ -394,33 +422,37 @@ export default function ChatSheet({ visible, onClose, session = null, profile = 
 
 function ListView({ styles, rooms, userId, loading, message, onCreate, onOpen, onLongPress }) {
   return (
-    <ScrollView contentContainerStyle={styles.content}>
-      <Pressable onPress={onCreate} style={styles.createRow}>
-        <View style={styles.createIcon}>
-          <Text style={styles.createIconText}>+</Text>
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.createTitle}>Create new chat</Text>
-          <Text style={styles.createHint}>Temporary rooms for friends only</Text>
-        </View>
-      </Pressable>
+    <View style={styles.listWrap}>
+      <View style={styles.createEntryWrap}>
+        <Pressable onPress={onCreate} style={styles.createRow}>
+          <View style={styles.createIcon}>
+            <Text style={styles.createIconText}>+</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.createTitle}>Create new chat</Text>
+            <Text style={styles.createHint}>Temporary rooms for friends only</Text>
+          </View>
+        </Pressable>
+      </View>
 
-      {message ? <MessageBox styles={styles} text={message} /> : null}
-      {loading ? <ActivityIndicator /> : null}
-      {!loading && rooms.length === 0 ? (
-        <Text style={styles.emptyText}>Ongoing chats will show up here.</Text>
-      ) : null}
-      {rooms.map((room) => (
-        <ChatRow
-          key={room.id}
-          room={room}
-          userId={userId}
-          styles={styles}
-          onPress={() => onOpen(room)}
-          onLongPress={() => onLongPress(room)}
-        />
-      ))}
-    </ScrollView>
+      <ScrollView style={styles.chatList} contentContainerStyle={styles.chatListContent}>
+        {message ? <MessageBox styles={styles} text={message} /> : null}
+        {loading ? <ActivityIndicator /> : null}
+        {!loading && rooms.length === 0 ? (
+          <Text style={styles.emptyText}>Ongoing chats will show up here.</Text>
+        ) : null}
+        {rooms.map((room) => (
+          <ChatRow
+            key={room.id}
+            room={room}
+            userId={userId}
+            styles={styles}
+            onPress={() => onOpen(room)}
+            onLongPress={() => onLongPress(room)}
+          />
+        ))}
+      </ScrollView>
+    </View>
   );
 }
 
@@ -440,7 +472,7 @@ function CreateView({
 }) {
   const canCreate = selectedFriendIds.length > 0 && !busy;
   return (
-    <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <View style={styles.createContent}>
       <View style={styles.section}>
         <Text style={styles.sectionLabel}>Name</Text>
         <TextInput
@@ -510,13 +542,14 @@ function CreateView({
       >
         {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Create chat</Text>}
       </Pressable>
-    </ScrollView>
+    </View>
   );
 }
 
 function RoomView({
   styles,
   colors,
+  spacing,
   room,
   messages,
   userId,
@@ -530,10 +563,13 @@ function RoomView({
 }) {
   const [selection, setSelection] = useState({ start: draft.length, end: draft.length });
   const [measuredInputHeight, setMeasuredInputHeight] = useState(0);
+  const [measuredTextHeight, setMeasuredTextHeight] = useState(0);
+  const [inputFrameWidth, setInputFrameWidth] = useState(0);
   const [keyboardInset, setKeyboardInset] = useState(0);
+  const measuredContentHeight = Math.max(measuredInputHeight, measuredTextHeight);
   const inputHeight = useMemo(
-    () => composerHeightForText(draft, measuredInputHeight),
-    [draft, measuredInputHeight]
+    () => composerHeightForText(draft, measuredContentHeight, inputFrameWidth, spacing.md),
+    [draft, inputFrameWidth, measuredContentHeight, spacing.md]
   );
   const currentUsername = normalizeUsername(profile?.username);
   const activeMention =
@@ -543,7 +579,10 @@ function RoomView({
     [room, userId, activeMention?.query]
   );
   useEffect(() => {
-    if (!draft) setMeasuredInputHeight(0);
+    if (!draft) {
+      setMeasuredInputHeight(0);
+      setMeasuredTextHeight(0);
+    }
   }, [draft]);
   useEffect(() => {
     if (Platform.OS === 'web') return undefined;
@@ -580,6 +619,14 @@ function RoomView({
     const measuredHeight = Math.ceil(event.nativeEvent.contentSize?.height || 0);
     setMeasuredInputHeight(measuredHeight);
   };
+  const updateMeasuredTextHeight = (event) => {
+    const measuredHeight = Math.ceil(event.nativeEvent.layout?.height || 0);
+    if (measuredHeight) setMeasuredTextHeight(measuredHeight);
+  };
+  const updateInputFrameWidth = (event) => {
+    const nextWidth = Math.round(event.nativeEvent.layout?.width || 0);
+    setInputFrameWidth((current) => (current === nextWidth ? current : nextWidth));
+  };
   const handleComposerKeyPress = (event) => {
     const nativeEvent = event.nativeEvent || {};
     if (Platform.OS !== 'web') return;
@@ -589,12 +636,12 @@ function RoomView({
     if (!draft.trim() || busy) return;
     onSend?.();
   };
+  const composerBottomLift = Platform.OS === 'web' ? spacing.md : spacing.xl;
 
   return (
     <KeyboardAvoidingView
       style={styles.roomWrap}
     >
-      <Text style={styles.expiryText}>{expiresText(room?.expiresAt)}</Text>
       <ScrollView
         ref={scrollRef}
         contentContainerStyle={styles.messagesContent}
@@ -604,14 +651,33 @@ function RoomView({
         {messages.length === 0 ? (
           <Text style={styles.emptyText}>No messages yet.</Text>
         ) : null}
-        {messages.map((item) => {
+        {messages.map((item, index) => {
+          if (item.isSystem) {
+            return (
+              <View key={item.id} style={styles.systemMessageRow}>
+                <View style={styles.systemMessageBox}>
+                  <Text style={styles.systemMessageText}>{item.body}</Text>
+                </View>
+              </View>
+            );
+          }
           const mine = item.senderId === userId;
           const mentioned = !mine && mentionsUsername(item.body, currentUsername);
+          const previous = messages[index - 1];
+          const next = messages[index + 1];
+          const startsSenderRun = !previous || previous.isSystem || previous.senderId !== item.senderId;
+          const endsSenderRun = !next || next.isSystem || next.senderId !== item.senderId;
           return (
             <View key={item.id} style={[styles.messageRow, mine && styles.messageRowMine]}>
-              {!mine ? <ProfileAvatar profile={item.sender} size={30} /> : null}
+              {!mine ? (
+                endsSenderRun ? (
+                  <ProfileAvatar profile={item.sender} size={30} />
+                ) : (
+                  <View style={styles.messageAvatarSpacer} />
+                )
+              ) : null}
               <View style={[styles.bubble, mentioned && styles.bubbleMentioned, mine && styles.bubbleMine]}>
-                {!mine ? (
+                {!mine && startsSenderRun ? (
                   <Text style={[styles.senderName, mentioned && styles.senderNameMentioned]} numberOfLines={1}>{publicName(item.sender)}</Text>
                 ) : null}
                 <Text style={[styles.messageText, mine && styles.messageTextMine]}>{item.body}</Text>
@@ -621,9 +687,15 @@ function RoomView({
         })}
       </ScrollView>
       {message ? <MessageBox styles={styles} text={message} /> : null}
-      <View style={[styles.composer, keyboardInset ? { marginBottom: keyboardInset } : null]}>
+      <View
+        style={[
+          styles.composer,
+          { paddingBottom: composerBottomLift },
+          keyboardInset ? { marginBottom: keyboardInset } : null,
+        ]}
+      >
         {showMentions ? (
-          <View style={[styles.mentionPanel, { bottom: inputHeight + 12 }]}>
+          <View style={[styles.mentionPanel, { bottom: inputHeight + composerBottomLift + 12 }]}>
             {mentionOptions.map((person) => (
               <Pressable
                 key={person.id}
@@ -639,33 +711,40 @@ function RoomView({
             ))}
           </View>
         ) : null}
-        <TextInput
-          value={draft}
-          onChangeText={updateDraft}
-          onContentSizeChange={updateInputHeight}
-          onKeyPress={handleComposerKeyPress}
-          onSubmitEditing={
-            Platform.OS === 'web'
-              ? undefined
-              : () => {
-                  if (!draft.trim() || busy) return;
-                  onSend?.();
-                }
-          }
-          onSelectionChange={(event) => setSelection(event.nativeEvent.selection)}
-          placeholder="Message"
-          placeholderTextColor={colors.textFaint}
-          style={[styles.composerInput, { height: inputHeight }]}
-          multiline
-          numberOfLines={Math.min(
-            COMPOSER_INPUT_MAX_LINES,
-            Math.max(1, String(draft || '').split('\n').length)
-          )}
-          scrollEnabled={inputHeight >= COMPOSER_INPUT_MAX_HEIGHT}
-          returnKeyType="send"
-          submitBehavior={Platform.OS === 'web' ? undefined : 'submit'}
-          maxLength={2000}
-        />
+        <View
+          onLayout={updateInputFrameWidth}
+          style={[styles.composerInputFrame, { height: inputHeight }]}
+        >
+          <Text
+            onLayout={updateMeasuredTextHeight}
+            pointerEvents="none"
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            style={styles.composerMeasureText}
+          >
+            {draft || ' '}
+          </Text>
+          <TextInput
+            value={draft}
+            onChangeText={updateDraft}
+            onContentSizeChange={updateInputHeight}
+            onKeyPress={handleComposerKeyPress}
+            onSelectionChange={(event) => setSelection(event.nativeEvent.selection)}
+            placeholder="Message"
+            placeholderTextColor={colors.textFaint}
+            style={[styles.composerInput, { minHeight: inputHeight }]}
+            multiline
+            numberOfLines={Math.min(
+              COMPOSER_INPUT_MAX_LINES,
+              Math.max(1, String(draft || '').split('\n').length)
+            )}
+            scrollEnabled={inputHeight >= COMPOSER_INPUT_MAX_HEIGHT}
+            returnKeyType={Platform.OS === 'web' ? 'send' : 'default'}
+            submitBehavior={Platform.OS === 'web' ? undefined : 'newline'}
+            blurOnSubmit={false}
+            maxLength={2000}
+          />
+        </View>
         <Pressable
           onPress={onSend}
           disabled={!draft.trim() || busy}
@@ -737,8 +816,67 @@ function ActionPanel({ styles, room, onCancel, onPin, onDelete }) {
   );
 }
 
-function ChatDetailsPanel({ styles, room, userId, onClose }) {
+function ChatDetailsPanel({
+  styles,
+  room,
+  userId,
+  friends,
+  busy,
+  onRename,
+  onAddParticipants,
+  onRequestFriend,
+  onClose,
+}) {
   const participants = room?.members || [];
+  const isCreator = room?.createdBy === userId;
+  const [draftName, setDraftName] = useState(room?.name || '');
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [showAddPeople, setShowAddPeople] = useState(false);
+  const [friendSearch, setFriendSearch] = useState('');
+  const memberIds = useMemo(() => new Set(participants.map((person) => person.id)), [participants]);
+  const addableFriends = useMemo(
+    () => (friends || []).filter((friend) => friend?.id && !memberIds.has(friend.id)),
+    [friends, memberIds]
+  );
+  const filteredAddableFriends = useMemo(() => {
+    const query = friendSearch.trim().toLowerCase();
+    if (!query) return addableFriends;
+    return addableFriends.filter((friend) => {
+      const name = publicName(friend).toLowerCase();
+      const username = String(friend.username || '').toLowerCase();
+      return name.includes(query) || username.includes(query);
+    });
+  }, [addableFriends, friendSearch]);
+  const cleanDraftName = draftName.trim();
+  const canSaveName = isCreator && cleanDraftName !== String(room?.name || '').trim() && !busy;
+  const canAddPeople = isCreator && selectedIds.length > 0 && !busy;
+
+  useEffect(() => {
+    setDraftName(room?.name || '');
+    setSelectedIds([]);
+    setShowAddPeople(false);
+    setFriendSearch('');
+  }, [room?.id, room?.name]);
+
+  const toggleSelected = (id) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const saveName = () => {
+    if (!canSaveName) return;
+    onRename(room, cleanDraftName);
+  };
+
+  const addPeople = () => {
+    if (!canAddPeople) return;
+    onAddParticipants(room, selectedIds);
+    setSelectedIds([]);
+    setShowAddPeople(false);
+    setFriendSearch('');
+  };
+
   return (
     <View style={styles.actionBackdrop}>
       <Pressable style={styles.backdropFill} onPress={onClose} />
@@ -750,34 +888,196 @@ function ChatDetailsPanel({ styles, room, userId, onClose }) {
           </Pressable>
         </View>
 
-        <View style={styles.detailsSection}>
-          <Text style={styles.sectionLabel}>Chat name</Text>
-          <Text style={styles.detailsValue}>{roomTitle(room, userId)}</Text>
-        </View>
-
-        <View style={styles.detailsSection}>
-          <Text style={styles.sectionLabel}>Participants</Text>
-          {participants.length === 0 ? (
-            <Text style={styles.emptyText}>No participants listed.</Text>
-          ) : (
-            participants.map((person) => (
-              <View key={person.id} style={styles.participantRow}>
-                <ProfileAvatar profile={person} size={34} />
-                <View style={styles.friendText}>
-                  <Text style={styles.friendName} numberOfLines={1}>{publicName(person)}</Text>
-                  <Text style={styles.friendUsername} numberOfLines={1}>
-                    {person.username ? `@${person.username}` : person.id === userId ? 'You' : 'Participant'}
-                  </Text>
-                </View>
+        <View style={styles.detailsContent}>
+          <View style={styles.detailsSection}>
+            <Text style={styles.sectionLabel}>Chat name</Text>
+            {isCreator ? (
+              <View style={styles.detailsEditRow}>
+                <TextInput
+                  value={draftName}
+                  onChangeText={setDraftName}
+                  placeholder="Optional chat name"
+                  placeholderTextColor={styles.placeholderColor.color}
+                  style={[styles.input, styles.detailsNameInput]}
+                  maxLength={80}
+                />
+                <Pressable
+                  onPress={saveName}
+                  disabled={!canSaveName}
+                  style={[styles.smallPrimaryBtn, !canSaveName && styles.disabled]}
+                >
+                  <Text style={styles.smallPrimaryText}>Save</Text>
+                </Pressable>
               </View>
-            ))
-          )}
-        </View>
+            ) : (
+              <Text style={styles.detailsValue}>{roomTitle(room, userId)}</Text>
+            )}
+          </View>
 
-        <View style={styles.detailsSection}>
-          <Text style={styles.sectionLabel}>Expiry date</Text>
-          <Text style={styles.detailsValue}>{formatExpiryDate(room?.expiresAt)}</Text>
+          <View style={styles.detailsSection}>
+            <View style={styles.participantHeader}>
+              <Text style={styles.sectionLabel}>Participants</Text>
+              {isCreator ? (
+                <Pressable
+                  onPress={() => setShowAddPeople(true)}
+                  style={styles.addParticipantBtn}
+                >
+                  <Text style={styles.addParticipantText}>Add participant</Text>
+                </Pressable>
+              ) : null}
+            </View>
+            <ScrollView
+              style={styles.participantsFrame}
+              contentContainerStyle={styles.participantsContent}
+              keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled
+            >
+              {participants.length === 0 ? (
+                <Text style={styles.emptyText}>No participants listed.</Text>
+              ) : (
+                participants.map((person) => {
+                  const isSelf = person.id === userId;
+                  const canRequest = !isSelf && !person.isFriend && !person.outgoingRequest && !busy;
+                  const actionLabel = person.isFriend
+                    ? 'Friends'
+                    : person.outgoingRequest
+                      ? 'Requested'
+                      : person.incomingRequest
+                        ? 'Confirm'
+                        : 'Request';
+                  return (
+                    <View key={person.id} style={styles.participantRow}>
+                      <ProfileAvatar profile={person} size={34} />
+                      <View style={styles.friendText}>
+                        <Text style={styles.friendName} numberOfLines={1}>{publicName(person)}</Text>
+                        <Text style={styles.friendUsername} numberOfLines={1}>
+                          {person.username ? `@${person.username}` : isSelf ? 'You' : 'Participant'}
+                        </Text>
+                      </View>
+                      {!isSelf ? (
+                        <Pressable
+                          onPress={() => onRequestFriend(person)}
+                          disabled={!canRequest}
+                          style={[styles.friendRequestBtn, !canRequest && styles.friendRequestBtnDisabled]}
+                        >
+                          <Text
+                            style={[
+                              styles.friendRequestText,
+                              !canRequest && styles.friendRequestTextDisabled,
+                            ]}
+                          >
+                            {actionLabel}
+                          </Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
+                  );
+                })
+              )}
+            </ScrollView>
+          </View>
+
+          <View style={styles.detailsSection}>
+            <Text style={styles.sectionLabel}>Expiry date</Text>
+            <Text style={styles.detailsValue}>{formatExpiryDate(room?.expiresAt)}</Text>
+          </View>
         </View>
+      </View>
+      {showAddPeople ? (
+        <AddParticipantsPanel
+          styles={styles}
+          friends={filteredAddableFriends}
+          selectedIds={selectedIds}
+          search={friendSearch}
+          setSearch={setFriendSearch}
+          toggleSelected={toggleSelected}
+          busy={busy}
+          canAdd={canAddPeople}
+          hasAnyFriends={addableFriends.length > 0}
+          onAdd={addPeople}
+          onCancel={() => {
+            setShowAddPeople(false);
+            setSelectedIds([]);
+            setFriendSearch('');
+          }}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+function AddParticipantsPanel({
+  styles,
+  friends,
+  selectedIds,
+  search,
+  setSearch,
+  toggleSelected,
+  busy,
+  canAdd,
+  hasAnyFriends,
+  onAdd,
+  onCancel,
+}) {
+  return (
+    <View style={styles.addParticipantOverlay}>
+      <Pressable style={styles.backdropFill} onPress={onCancel} />
+      <View style={styles.addParticipantPanel}>
+        <View style={styles.detailsHeader}>
+          <Text style={styles.detailsTitle}>Add participant</Text>
+          <Pressable onPress={onCancel} hitSlop={8}>
+            <Text style={styles.doneText}>Cancel</Text>
+          </Pressable>
+        </View>
+        <TextInput
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search friends"
+          placeholderTextColor={styles.placeholderColor.color}
+          style={styles.input}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        <ScrollView
+          style={styles.addParticipantList}
+          contentContainerStyle={styles.addParticipantListContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          {!hasAnyFriends ? (
+            <Text style={styles.emptyText}>Everyone in your friends list is already here.</Text>
+          ) : friends.length === 0 ? (
+            <Text style={styles.emptyText}>No friends match that search.</Text>
+          ) : (
+            friends.map((friend) => {
+              const selected = selectedIds.includes(friend.id);
+              return (
+                <Pressable
+                  key={friend.id}
+                  onPress={() => toggleSelected(friend.id)}
+                  style={[styles.friendPickRow, selected && styles.friendPickRowSelected]}
+                >
+                  <ProfileAvatar profile={friend} size={38} />
+                  <View style={styles.friendText}>
+                    <Text style={styles.friendName} numberOfLines={1}>{publicName(friend)}</Text>
+                    <Text style={styles.friendUsername} numberOfLines={1}>
+                      {friend.username ? `@${friend.username}` : 'Friend'}
+                    </Text>
+                  </View>
+                  <View style={[styles.checkCircle, selected && styles.checkCircleSelected]}>
+                    {selected ? <Text style={styles.checkText}>✓</Text> : null}
+                  </View>
+                </Pressable>
+              );
+            })
+          )}
+        </ScrollView>
+        <Pressable
+          onPress={onAdd}
+          disabled={!canAdd}
+          style={[styles.primaryBtn, !canAdd && styles.disabled]}
+        >
+          {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Add to chat</Text>}
+        </Pressable>
       </View>
     </View>
   );
@@ -807,16 +1107,33 @@ function getActiveMention(value, cursorPosition) {
   };
 }
 
-function composerHeightForText(value, measuredHeight = 0) {
+function composerHeightForText(value, measuredHeight = 0, inputWidth = 0, horizontalPadding = 0) {
   const text = String(value || '');
   const explicitLineCount = Math.max(1, text.split('\n').length);
+  const wrappedLineCount = estimateWrappedLineCount(text, inputWidth, horizontalPadding);
+  const lineCount = Math.max(explicitLineCount, wrappedLineCount);
   const explicitLineHeight =
-    explicitLineCount * COMPOSER_INPUT_LINE_HEIGHT + COMPOSER_INPUT_VERTICAL_PADDING;
+    lineCount * COMPOSER_INPUT_LINE_HEIGHT + COMPOSER_INPUT_VERTICAL_PADDING;
   const nextHeight = Math.max(measuredHeight, explicitLineHeight);
   return Math.min(
     COMPOSER_INPUT_MAX_HEIGHT,
     Math.max(COMPOSER_INPUT_MIN_HEIGHT, nextHeight)
   );
+}
+
+function estimateWrappedLineCount(value, inputWidth, horizontalPadding) {
+  const text = String(value || '');
+  const availableWidth = inputWidth - horizontalPadding * 2;
+  if (availableWidth <= 0) return Math.max(1, text.split('\n').length);
+
+  const charactersPerLine = Math.max(
+    1,
+    Math.floor(availableWidth / COMPOSER_INPUT_AVERAGE_CHAR_WIDTH)
+  );
+  return text.split('\n').reduce((total, line) => {
+    const visualLength = Math.max(1, line.length);
+    return total + Math.ceil(visualLength / charactersPerLine);
+  }, 0);
 }
 
 function getMentionOptions(room, userId, query) {
@@ -888,72 +1205,103 @@ function formatExpiryDate(expiresAt) {
 
 const makeStyles = ({ colors, spacing, radius, typography }) =>
   StyleSheet.create({
-    backdrop: {
+    screen: {
       flex: 1,
-      backgroundColor: colors.overlay,
-      justifyContent: Platform.OS === 'web' ? 'center' : 'flex-end',
-      padding: Platform.OS === 'web' ? spacing.lg : 0,
+      position: 'relative',
+      backgroundColor: colors.bg,
+      paddingTop: Platform.OS === 'ios' ? 44 : Platform.OS === 'web' ? 0 : spacing.lg,
+      paddingBottom: 0,
     },
     backdropFill: { ...StyleSheet.absoluteFillObject },
-    sheet: {
-      alignSelf: Platform.OS === 'web' ? 'center' : 'stretch',
+    chatWindow: {
+      flex: 1,
+      alignSelf: 'center',
       backgroundColor: colors.bg,
-      borderTopLeftRadius: radius.xl,
-      borderTopRightRadius: radius.xl,
-      borderBottomLeftRadius: Platform.OS === 'web' ? radius.xl : 0,
-      borderBottomRightRadius: Platform.OS === 'web' ? radius.xl : 0,
-      width: Platform.OS === 'web' ? '100%' : undefined,
-      maxWidth: Platform.OS === 'web' ? 860 : undefined,
-      height: '88%',
-      paddingBottom: spacing.lg,
+      width: '100%',
       overflow: 'hidden',
     },
-    dragZone: {
-      paddingBottom: spacing.sm,
+    windowHeader: {
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
     },
-    handle: {
-      alignSelf: 'center',
-      width: 40,
-      height: 4,
-      borderRadius: 2,
-      backgroundColor: colors.borderStrong,
-      marginTop: spacing.sm,
-      marginBottom: spacing.sm,
+    windowHeaderPlain: {
+      borderBottomWidth: 0,
     },
     header: {
-      minHeight: 48,
+      minHeight: 42,
       flexDirection: 'row',
       alignItems: 'center',
       paddingHorizontal: spacing.lg,
-      paddingVertical: spacing.sm,
+      paddingVertical: spacing.xs,
       gap: spacing.sm,
     },
     headerSide: {
-      minWidth: 48,
+      width: 64,
     },
     title: {
       ...typography.title,
       flex: 1,
-      fontSize: 22,
+      fontSize: 20,
       textAlign: 'center',
     },
     titleButton: {
       flex: 1,
       minWidth: 0,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    roomTitle: {
+      ...typography.title,
+      color: colors.text,
+      fontSize: 18,
+      textAlign: 'center',
+    },
+    headerExpiryText: {
+      color: colors.textMuted,
+      fontSize: 11,
+      fontWeight: '700',
+      lineHeight: 14,
+      marginTop: 1,
+      textAlign: 'center',
     },
     backText: {
-      fontSize: 15,
+      fontSize: 14,
       fontWeight: '600',
       color: colors.primary,
     },
     doneText: {
-      fontSize: 15,
+      fontSize: 14,
       fontWeight: '600',
       color: colors.primary,
       textAlign: 'right',
     },
     content: {
       paddingHorizontal: spacing.lg,
+      paddingBottom: spacing.xl,
+      gap: spacing.md,
+    },
+    createContent: {
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.lg,
+      paddingBottom: spacing.xl,
+      gap: spacing.md,
+    },
+    listWrap: {
+      flex: 1,
+      minHeight: 0,
+    },
+    createEntryWrap: {
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    chatList: {
+      flex: 1,
+    },
+    chatListContent: {
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.lg,
       paddingBottom: spacing.xl,
       gap: spacing.md,
     },
@@ -1088,6 +1436,9 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       fontSize: 16,
       color: colors.text,
     },
+    placeholderColor: {
+      color: colors.textFaint,
+    },
     durationGrid: {
       flexDirection: 'row',
       gap: spacing.sm,
@@ -1193,15 +1544,9 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       flex: 1,
       minHeight: 0,
     },
-    expiryText: {
-      color: colors.textMuted,
-      fontSize: 12,
-      fontWeight: '700',
-      textAlign: 'center',
-      paddingBottom: spacing.sm,
-    },
     messagesContent: {
       paddingHorizontal: spacing.lg,
+      paddingTop: spacing.md,
       paddingBottom: spacing.lg,
       gap: spacing.sm,
       flexGrow: 1,
@@ -1215,6 +1560,30 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
     messageRowMine: {
       alignSelf: 'flex-end',
       justifyContent: 'flex-end',
+    },
+    messageAvatarSpacer: {
+      width: 30,
+      height: 30,
+    },
+    systemMessageRow: {
+      alignItems: 'center',
+      paddingVertical: spacing.xs,
+    },
+    systemMessageBox: {
+      maxWidth: '86%',
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.cardMuted,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.xs,
+    },
+    systemMessageText: {
+      color: colors.textMuted,
+      fontSize: 12,
+      lineHeight: 16,
+      fontWeight: '700',
+      textAlign: 'center',
     },
     bubble: {
       backgroundColor: colors.card,
@@ -1298,18 +1667,41 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       fontWeight: '700',
       marginTop: 1,
     },
-    composerInput: {
+    composerInputFrame: {
       flex: 1,
+      position: 'relative',
+      minHeight: COMPOSER_INPUT_MIN_HEIGHT,
+      maxHeight: COMPOSER_INPUT_MAX_HEIGHT,
       backgroundColor: colors.card,
       borderRadius: radius.md,
       borderWidth: 1,
       borderColor: colors.border,
+      overflow: 'hidden',
+    },
+    composerInput: {
+      width: '100%',
+      minHeight: COMPOSER_INPUT_MIN_HEIGHT,
+      maxHeight: COMPOSER_INPUT_MAX_HEIGHT,
+      backgroundColor: 'transparent',
+      borderWidth: 0,
       paddingHorizontal: spacing.md,
       paddingVertical: spacing.sm,
-      fontSize: 15,
+      fontSize: COMPOSER_INPUT_FONT_SIZE,
       lineHeight: COMPOSER_INPUT_LINE_HEIGHT,
       color: colors.text,
       textAlignVertical: 'top',
+    },
+    composerMeasureText: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      top: 0,
+      opacity: 0,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      fontSize: COMPOSER_INPUT_FONT_SIZE,
+      lineHeight: COMPOSER_INPUT_LINE_HEIGHT,
+      color: colors.text,
     },
     sendBtn: {
       minHeight: 44,
@@ -1382,12 +1774,13 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       alignSelf: Platform.OS === 'web' ? 'center' : 'stretch',
       width: Platform.OS === 'web' ? '100%' : undefined,
       maxWidth: Platform.OS === 'web' ? 520 : undefined,
+      maxHeight: '88%',
       backgroundColor: colors.card,
       borderRadius: radius.lg,
       borderWidth: 1,
       borderColor: colors.border,
       padding: spacing.md,
-      gap: spacing.lg,
+      gap: spacing.md,
     },
     detailsHeader: {
       flexDirection: 'row',
@@ -1400,13 +1793,95 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       fontSize: 18,
       fontWeight: '800',
     },
+    detailsContent: {
+      gap: spacing.lg,
+      paddingBottom: spacing.sm,
+    },
     detailsSection: {
       gap: spacing.sm,
+    },
+    detailsEditRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+    },
+    detailsNameInput: {
+      flex: 1,
+      minWidth: 0,
     },
     detailsValue: {
       color: colors.text,
       fontSize: 16,
       fontWeight: '700',
+    },
+    smallPrimaryBtn: {
+      minHeight: 46,
+      borderRadius: radius.md,
+      backgroundColor: colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: spacing.md,
+    },
+    smallPrimaryText: {
+      color: '#fff',
+      fontSize: 14,
+      fontWeight: '800',
+    },
+    participantHeader: {
+      minHeight: 34,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: spacing.sm,
+    },
+    addParticipantBtn: {
+      minHeight: 34,
+      borderRadius: radius.sm,
+      backgroundColor: colors.primarySoft,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: spacing.md,
+    },
+    addParticipantText: {
+      color: colors.primary,
+      fontSize: 13,
+      fontWeight: '800',
+    },
+    addParticipantOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      justifyContent: Platform.OS === 'web' ? 'center' : 'flex-end',
+      backgroundColor: colors.overlay,
+    },
+    addParticipantPanel: {
+      margin: spacing.lg,
+      alignSelf: Platform.OS === 'web' ? 'center' : 'stretch',
+      width: Platform.OS === 'web' ? '100%' : undefined,
+      maxWidth: Platform.OS === 'web' ? 480 : undefined,
+      maxHeight: '78%',
+      backgroundColor: colors.card,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: spacing.md,
+      gap: spacing.md,
+    },
+    addParticipantList: {
+      maxHeight: 360,
+    },
+    addParticipantListContent: {
+      gap: spacing.sm,
+      paddingBottom: spacing.xs,
+    },
+    participantsFrame: {
+      maxHeight: 310,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.card,
+    },
+    participantsContent: {
+      padding: spacing.sm,
+      gap: spacing.sm,
     },
     participantRow: {
       flexDirection: 'row',
@@ -1415,5 +1890,26 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       backgroundColor: colors.cardMuted,
       padding: spacing.sm,
       gap: spacing.sm,
+    },
+    friendRequestBtn: {
+      minHeight: 34,
+      borderRadius: radius.sm,
+      backgroundColor: colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: spacing.md,
+    },
+    friendRequestBtnDisabled: {
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    friendRequestText: {
+      color: '#fff',
+      fontSize: 13,
+      fontWeight: '800',
+    },
+    friendRequestTextDisabled: {
+      color: colors.textMuted,
     },
   });

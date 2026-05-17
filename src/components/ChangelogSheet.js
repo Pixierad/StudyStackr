@@ -78,15 +78,17 @@ export default function ChangelogSheet({ visible, entries = [], onClose }) {
       if (mountedRef.current) onClose?.();
     });
   };
+  const isHeaderDrag = (event, gs) => {
+    const y = event.nativeEvent.locationY ?? 0;
+    return y <= 112 && gs.dy > 2 && Math.abs(gs.dy) > Math.abs(gs.dx);
+  };
 
   const panResponderRef = useRef(null);
   if (panResponderRef.current == null) {
     panResponderRef.current = PanResponder.create({
       onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, gs) =>
-        gs.dy > 3 && Math.abs(gs.dy) > Math.abs(gs.dx),
-      onMoveShouldSetPanResponderCapture: (_, gs) =>
-        gs.dy > 3 && Math.abs(gs.dy) > Math.abs(gs.dx),
+      onMoveShouldSetPanResponder: isHeaderDrag,
+      onMoveShouldSetPanResponderCapture: isHeaderDrag,
       onPanResponderGrant: () => translateY.stopAnimation(),
       onPanResponderMove: (_, gs) => {
         if (gs.dy > 0) translateY.setValue(gs.dy);

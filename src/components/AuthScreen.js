@@ -226,7 +226,7 @@ export default function AuthScreen() {
       : 'Sign up to back up your tasks to the cloud.';
 
   const toggleLabel =
-    authMethod === 'password' ? 'Use one-time code instead' : 'Use password instead';
+    authMethod === 'password' ? 'Use one-time code instead (CURRENTLY NOT WORKING)' : 'Use password instead';
 
   return (
     <KeyboardAvoidingView

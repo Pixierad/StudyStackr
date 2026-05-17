@@ -515,14 +515,36 @@ create table if not exists public.chat_room_members (
 create table if not exists public.chat_messages (
   id uuid primary key default gen_random_uuid(),
   room_id uuid not null references public.chat_rooms(id) on delete cascade,
-  sender_id uuid not null references auth.users(id) on delete cascade,
+  sender_id uuid references auth.users(id) on delete cascade,
   body text not null,
+  message_type text not null default 'message',
   created_at timestamptz not null default now(),
   edited_at timestamptz,
   deleted_at timestamptz,
   check (length(trim(body)) > 0),
+  check (message_type in ('message', 'system')),
   check (length(body) <= 2000)
 );
+
+alter table public.chat_messages
+  alter column sender_id drop not null;
+
+alter table public.chat_messages
+  add column if not exists message_type text not null default 'message';
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'chat_messages_message_type_check'
+  ) then
+    alter table public.chat_messages
+      add constraint chat_messages_message_type_check
+      check (message_type in ('message', 'system'));
+  end if;
+end;
+$$;
 
 create index if not exists chat_rooms_expires_at_idx on public.chat_rooms(expires_at);
 create index if not exists chat_room_members_user_id_idx on public.chat_room_members(user_id);
@@ -593,6 +615,7 @@ create policy "chat_messages_select_member"
 create policy "chat_messages_insert_member"
   on public.chat_messages for insert with check (
     sender_id = auth.uid()
+    and message_type = 'message'
     and length(trim(body)) > 0
     and exists (
       select 1
@@ -618,7 +641,27 @@ as $$
         'name', p.name,
         'username', p.username,
         'avatar_type', p.avatar_type,
-        'avatar_value', p.avatar_value
+        'avatar_value', p.avatar_value,
+        'is_friend', exists (
+          select 1
+          from public.friends f
+          where f.user_id = auth.uid()
+            and f.friend_id = p.id
+        ),
+        'incoming_request', exists (
+          select 1
+          from public.friend_requests fr
+          where fr.requester_id = p.id
+            and fr.addressee_id = auth.uid()
+            and fr.status = 'pending'
+        ),
+        'outgoing_request', exists (
+          select 1
+          from public.friend_requests fr
+          where fr.requester_id = auth.uid()
+            and fr.addressee_id = p.id
+            and fr.status = 'pending'
+        )
       )
       order by case when p.id = auth.uid() then 0 else 1 end, p.name
     ),
@@ -627,6 +670,7 @@ as $$
   from public.chat_room_members m
   join public.profiles p on p.id = m.user_id
   where m.room_id = room_profile_id
+    and m.hidden_at is null
     and exists (
       select 1
       from public.chat_room_members self
@@ -694,6 +738,148 @@ begin
 end;
 $$;
 
+create or replace function public.rename_chat_room(room_profile_id uuid, room_name text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  clean_name text;
+  actor_name text;
+begin
+  if auth.uid() is null then
+    raise exception 'You must be signed in to edit a chat.';
+  end if;
+
+  clean_name := left(trim(coalesce(room_name, '')), 80);
+  select coalesce(nullif(trim(p.name), ''), p.username, 'Someone') into actor_name
+  from public.profiles p
+  where p.id = auth.uid();
+
+  update public.chat_rooms
+  set name = clean_name
+  where id = room_profile_id
+    and created_by = auth.uid()
+    and expires_at > now();
+
+  if not found then
+    raise exception 'Only the chat creator can edit this chat.';
+  end if;
+
+  insert into public.chat_messages (room_id, sender_id, body, message_type)
+  values (
+    room_profile_id,
+    null,
+    actor_name || case
+      when clean_name = '' then ' cleared the chat name.'
+      else ' changed the chat name to "' || clean_name || '".'
+    end,
+    'system'
+  );
+end;
+$$;
+
+create or replace function public.add_chat_participants(
+  room_profile_id uuid,
+  friend_ids uuid[]
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  clean_friend_ids uuid[];
+  requested_count integer;
+  friend_count integer;
+  actor_name text;
+  added_names text;
+begin
+  if auth.uid() is null then
+    raise exception 'You must be signed in to add people to a chat.';
+  end if;
+
+  if not exists (
+    select 1
+    from public.chat_rooms r
+    where r.id = room_profile_id
+      and r.created_by = auth.uid()
+      and r.expires_at > now()
+  ) then
+    raise exception 'Only the chat creator can add people.';
+  end if;
+
+  select array(
+    select distinct x
+    from unnest(coalesce(friend_ids, array[]::uuid[])) as x
+    where x is not null
+      and x <> auth.uid()
+      and not exists (
+        select 1
+        from public.chat_room_members m
+        where m.room_id = room_profile_id
+          and m.user_id = x
+          and m.hidden_at is null
+      )
+  ) into clean_friend_ids;
+
+  requested_count := coalesce(array_length(clean_friend_ids, 1), 0);
+  if requested_count = 0 then
+    return;
+  end if;
+
+  select count(*) into friend_count
+  from public.friends f
+  where f.user_id = auth.uid()
+    and f.friend_id = any(clean_friend_ids);
+
+  if friend_count <> requested_count then
+    raise exception 'Chats can only include people in your friends list.';
+  end if;
+
+  insert into public.chat_room_members (room_id, user_id)
+  select room_profile_id, x
+  from unnest(clean_friend_ids) as x
+  on conflict (room_id, user_id)
+  do update set hidden_at = null;
+
+  select coalesce(nullif(trim(p.name), ''), p.username, 'Someone') into actor_name
+  from public.profiles p
+  where p.id = auth.uid();
+
+  select string_agg(coalesce(nullif(trim(p.name), ''), p.username, 'Someone'), ', ' order by p.name)
+    into added_names
+  from public.profiles p
+  where p.id = any(clean_friend_ids);
+
+  insert into public.chat_messages (room_id, sender_id, body, message_type)
+  values (
+    room_profile_id,
+    null,
+    actor_name || ' added ' || coalesce(added_names, 'someone') || ' to the chat.',
+    'system'
+  );
+end;
+$$;
+
+create or replace function public.cleanup_expired_chat_rooms()
+returns bigint
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  deleted_count bigint;
+begin
+  delete from public.chat_rooms
+  where expires_at <= now();
+
+  get diagnostics deleted_count = row_count;
+  return deleted_count;
+end;
+$$;
+
 create or replace function public.list_chat_rooms()
 returns table (
   id uuid,
@@ -712,6 +898,9 @@ language sql
 security definer
 set search_path = public
 as $$
+  with cleanup as (
+    select public.cleanup_expired_chat_rooms()
+  )
   select
     r.id,
     r.name,
@@ -731,7 +920,7 @@ as $$
         and (self.last_read_at is null or unread.created_at > self.last_read_at)
     ) as unread_count,
     public.chat_member_profiles(r.id) as members
-  from public.chat_room_members self
+  from cleanup, public.chat_room_members self
   join public.chat_rooms r on r.id = self.room_id
   left join lateral (
     select body, created_at
@@ -750,6 +939,8 @@ as $$
     coalesce(last_msg.created_at, r.created_at) desc;
 $$;
 
+drop function if exists public.list_chat_messages(uuid);
+
 create or replace function public.list_chat_messages(room_profile_id uuid)
 returns table (
   id uuid,
@@ -760,12 +951,16 @@ returns table (
   sender_name text,
   sender_username text,
   sender_avatar_type text,
-  sender_avatar_value text
+  sender_avatar_value text,
+  message_type text
 )
 language sql
 security definer
 set search_path = public
 as $$
+  with cleanup as (
+    select public.cleanup_expired_chat_rooms()
+  )
   select
     msg.id,
     msg.room_id,
@@ -775,8 +970,9 @@ as $$
     p.name as sender_name,
     p.username as sender_username,
     p.avatar_type as sender_avatar_type,
-    p.avatar_value as sender_avatar_value
-  from public.chat_messages msg
+    p.avatar_value as sender_avatar_value,
+    coalesce(msg.message_type, 'message') as message_type
+  from cleanup, public.chat_messages msg
   join public.chat_rooms r on r.id = msg.room_id
   join public.chat_room_members self on self.room_id = msg.room_id
   left join public.profiles p on p.id = msg.sender_id
@@ -862,13 +1058,42 @@ $$;
 
 create or replace function public.hide_chat_room(room_profile_id uuid)
 returns void
-language sql
+language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  actor_name text;
+  was_visible boolean;
+begin
+  select exists (
+    select 1
+    from public.chat_room_members m
+    join public.chat_rooms r on r.id = m.room_id
+    where m.room_id = room_profile_id
+      and m.user_id = auth.uid()
+      and m.hidden_at is null
+      and r.expires_at > now()
+  ) into was_visible;
+
   update public.chat_room_members
   set hidden_at = now(), is_pinned = false
   where auth.uid() is not null
     and room_id = room_profile_id
     and user_id = auth.uid();
+
+  if was_visible then
+    select coalesce(nullif(trim(p.name), ''), p.username, 'Someone') into actor_name
+    from public.profiles p
+    where p.id = auth.uid();
+
+    insert into public.chat_messages (room_id, sender_id, body, message_type)
+    values (
+      room_profile_id,
+      null,
+      actor_name || ' left the chat.',
+      'system'
+    );
+  end if;
+end;
 $$;

@@ -142,15 +142,18 @@ export default function ProfileSheet({
     closeWithAnimation();
   }, [closeWithAnimation, commitProfile, translateY]);
 
+  const isHeaderDrag = (event, gs) => {
+    const y = event.nativeEvent.locationY ?? 0;
+    return y <= 112 && gs.dy > 2 && Math.abs(gs.dy) > Math.abs(gs.dx);
+  };
+
   const panResponder = useMemo(
     () =>
       PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onStartShouldSetPanResponderCapture: () => false,
-      onMoveShouldSetPanResponder: (_, gs) =>
-        gs.dy > 3 && Math.abs(gs.dy) > Math.abs(gs.dx),
-      onMoveShouldSetPanResponderCapture: (_, gs) =>
-        gs.dy > 3 && Math.abs(gs.dy) > Math.abs(gs.dx),
+      onMoveShouldSetPanResponder: isHeaderDrag,
+      onMoveShouldSetPanResponderCapture: isHeaderDrag,
       onPanResponderGrant: () => {
         translateY.stopAnimation();
       },
@@ -227,7 +230,9 @@ export default function ProfileSheet({
     <Modal visible={visible} animationType="none" transparent onRequestClose={closeWithAnimation}>
       <View style={styles.backdrop}>
         <Pressable style={styles.backdropFill} onPress={closeWithAnimation} />
-        <Animated.View style={[styles.sheet, shadow.float, { transform: [{ translateY }] }]}>
+        <Animated.View
+          style={[styles.sheet, shadow.float, { transform: [{ translateY }] }]}
+        >
           <View style={styles.dragZone} {...panResponder.panHandlers}>
             <View style={styles.handle} />
             <View style={styles.header}>

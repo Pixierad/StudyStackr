@@ -211,11 +211,12 @@ function AppContent() {
         if (!room) return;
         const sender = (room.members || []).find((member) => member.id === row.sender_id);
         const chatName = notificationRoomTitle(room, sessionUserId);
+        const senderName = publicName(sender) || 'Someone';
         addNotification({
           id: `message:${row.id}`,
           type: 'message',
-          title: `New message in ${chatName}`,
-          body: `${publicName(sender)}: ${shortNotificationBody(row.body)}`,
+          title: `New message from ${senderName} in ${chatName}`,
+          body: shortNotificationBody(row.body),
           createdAt: row.created_at,
         });
       } catch {

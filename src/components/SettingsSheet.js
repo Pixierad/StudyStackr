@@ -32,7 +32,7 @@ const CUSTOM_COLOR_OPTIONS = [
   '#64748B', '#374151', '#000000', '#FFFFFF',
 ];
 
-// Settings bottom sheet: account, theme gallery, and custom theme builder.
+// Full-screen settings window: account, theme gallery, and custom theme builder.
 export default function SettingsSheet({
   visible,
   onClose,
@@ -58,87 +58,30 @@ export default function SettingsSheet({
     [colors, spacing, radius, typography]
   );
 
-  // Local draft — synced from prop each time the sheet opens.
-  // Saved when the user taps Done or dismisses the sheet.
+  // Local draft synced each time Settings opens; only Confirm applies it.
   const [builderOpen, setBuilderOpen] = useState(false);
+  const [draftThemeKey, setDraftThemeKey] = useState(themeKey);
+  const initialThemeKeyRef = useRef(themeKey);
 
   useEffect(() => {
     if (visible) {
       setBuilderOpen(false);
+      setDraftThemeKey(themeKey);
+      initialThemeKeyRef.current = themeKey;
     }
   }, [visible]);
 
-  const handleClose = () => {
+  const handleCancel = () => {
+    if (themeKey !== initialThemeKeyRef.current) setTheme(initialThemeKeyRef.current);
+    setDraftThemeKey(initialThemeKeyRef.current);
     onClose();
   };
 
-  // --- Swipe-to-dismiss ---
-  const screenHeight = Dimensions.get('window').height;
-  // Lazy-init avoids re-allocating Animated.Value on every render.
-  const translateYRef = useRef(null);
-  if (translateYRef.current == null) translateYRef.current = new Animated.Value(0);
-  const translateY = translateYRef.current;
-
-  // Track mount state -- the dismiss animation has a 200ms continuation
-  // and we don't want it to fire onClose against an unmounted
-  // tree.
-  const mountedRef = useRef(true);
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (visible) {
-      translateY.setValue(screenHeight);
-      Animated.spring(translateY, {
-        toValue: 0,
-        useNativeDriver: true,
-        bounciness: 0,
-        speed: 20,
-      }).start();
-    }
-  }, [visible, translateY, screenHeight]);
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onStartShouldSetPanResponderCapture: () => false,
-      onMoveShouldSetPanResponder: (_, gs) =>
-        gs.dy > 3 && Math.abs(gs.dy) > Math.abs(gs.dx),
-      onMoveShouldSetPanResponderCapture: (_, gs) =>
-        gs.dy > 3 && Math.abs(gs.dy) > Math.abs(gs.dx),
-      onPanResponderGrant: () => {
-        translateY.stopAnimation();
-      },
-      onPanResponderMove: (_, gs) => {
-        if (gs.dy > 0) translateY.setValue(gs.dy);
-      },
-      onPanResponderRelease: (_, gs) => {
-        const dismissed = gs.dy > 100 || gs.vy > 0.5;
-        if (dismissed) {
-          Animated.timing(translateY, {
-            toValue: screenHeight,
-            duration: 200,
-            useNativeDriver: true,
-          }).start(() => {
-            if (!mountedRef.current) return;
-            onClose();
-          });
-        } else {
-          Animated.spring(translateY, {
-            toValue: 0,
-            useNativeDriver: true,
-            bounciness: 0,
-          }).start();
-        }
-      },
-      onPanResponderTerminationRequest: () => false,
-      onShouldBlockNativeResponder: () => true,
-    })
-  ).current;
+  const handleConfirm = () => {
+    if (draftThemeKey !== themeKey) setTheme(draftThemeKey);
+    initialThemeKeyRef.current = draftThemeKey;
+    onClose();
+  };
 
   const confirmDeleteCustom = (theme) => {
     const run = () => deleteCustomTheme(theme.key);
@@ -155,23 +98,22 @@ export default function SettingsSheet({
   const allThemeKeys = [...THEME_PRESET_KEYS, ...customThemes.map((t) => t.key)];
 
   return (
-    <Modal visible={visible} animationType="none" transparent onRequestClose={handleClose}>
-      <View style={styles.backdrop}>
-        <Pressable style={styles.backdropFill} onPress={handleClose} />
-        <Animated.View
-          style={[styles.sheet, shadow.float, { transform: [{ translateY }] }]}
-        >
-          <View style={styles.dragZone} {...panResponder.panHandlers}>
-            <View style={styles.handle} />
-            <View style={styles.header}>
-              <Text style={styles.title}>Settings</Text>
-              <Pressable onPress={handleClose} hitSlop={8}>
-                <Text style={styles.doneText}>Done</Text>
+    <Modal visible={visible} animationType="slide" onRequestClose={handleCancel} presentationStyle="fullScreen">
+      <View style={styles.settingsScreen}>
+        <View style={styles.settingsWindow}>
+          <View style={styles.settingsWindowHeader}>
+            <View style={styles.settingsHeader}>
+              <Pressable onPress={handleCancel} hitSlop={8} style={styles.settingsHeaderSide}>
+                <Text style={styles.doneText}>Cancel</Text>
+              </Pressable>
+              <Text style={styles.settingsTitle} numberOfLines={1}>Settings</Text>
+              <Pressable onPress={handleConfirm} hitSlop={8} style={styles.settingsHeaderSide}>
+                <Text style={[styles.doneText, styles.confirmText]}>Confirm</Text>
               </Pressable>
             </View>
           </View>
 
-          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          <ScrollView style={styles.settingsScroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
 
             {/* Theme gallery */}
             <View style={styles.section}>
@@ -184,13 +126,13 @@ export default function SettingsSheet({
               <View style={styles.themeGrid}>
                 {allThemeKeys.map((key) => {
                   const preview = previewColorsFor(key, customThemes);
-                  const selected = themeKey === key;
+                  const selected = draftThemeKey === key;
                   return (
                     <ThemeTile
                       key={key}
                       preview={preview}
                       selected={selected}
-                      onPress={() => setTheme(key)}
+                      onPress={() => setDraftThemeKey(key)}
                       onLongPress={
                         preview.isCustom ? () => confirmDeleteCustom({ key, label: preview.label }) : undefined
                       }
@@ -210,7 +152,10 @@ export default function SettingsSheet({
               <View style={styles.section}>
                 <Text style={styles.sectionLabel}>About</Text>
                 <Pressable
-                  onPress={() => onShowChangelog?.()}
+                  onPress={() => {
+                    handleCancel();
+                    onShowChangelog?.();
+                  }}
                   style={styles.changelogRow}
                   accessibilityRole="button"
                   accessibilityLabel="Show what's new"
@@ -268,11 +213,12 @@ export default function SettingsSheet({
             visible={builderOpen}
             onClose={() => setBuilderOpen(false)}
             onCreate={(draft) => {
-              addCustomTheme(draft);
+              const created = addCustomTheme(draft);
+              if (created?.key) setDraftThemeKey(created.key);
               setBuilderOpen(false);
             }}
           />
-        </Animated.View>
+        </View>
       </View>
     </Modal>
   );
@@ -350,16 +296,18 @@ function CustomThemeBuilder({ visible, onClose, onCreate }) {
       if (builderMountedRef.current) onClose?.();
     });
   }, [builderScreenHeight, builderTranslateY, onClose]);
+  const isBuilderHeaderDrag = (event, gs) => {
+    const y = event.nativeEvent.locationY ?? 0;
+    return y <= 112 && gs.dy > 2 && Math.abs(gs.dy) > Math.abs(gs.dx);
+  };
 
   const builderPanResponder = useMemo(
     () =>
       PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onStartShouldSetPanResponderCapture: () => false,
-      onMoveShouldSetPanResponder: (_, gs) =>
-        gs.dy > 3 && Math.abs(gs.dy) > Math.abs(gs.dx),
-      onMoveShouldSetPanResponderCapture: (_, gs) =>
-        gs.dy > 3 && Math.abs(gs.dy) > Math.abs(gs.dx),
+      onMoveShouldSetPanResponder: isBuilderHeaderDrag,
+      onMoveShouldSetPanResponderCapture: isBuilderHeaderDrag,
       onPanResponderGrant: () => {
         builderTranslateY.stopAnimation();
       },
@@ -410,7 +358,9 @@ function CustomThemeBuilder({ visible, onClose, onCreate }) {
     <Modal visible={visible} animationType="none" transparent onRequestClose={closeBuilderWithAnimation}>
       <View style={styles.builderBackdrop}>
         <Pressable style={styles.backdropFill} onPress={closeBuilderWithAnimation} />
-        <Animated.View style={[styles.builderSheet, shadow.float, { transform: [{ translateY: builderTranslateY }] }]}>
+        <Animated.View
+          style={[styles.builderSheet, shadow.float, { transform: [{ translateY: builderTranslateY }] }]}
+        >
           <View style={styles.dragZone} {...builderPanResponder.panHandlers}>
             <View style={styles.handle} />
             <View style={styles.header}>
@@ -592,6 +542,40 @@ function SegmentButton({ label, active, onPress, styles }) {
 
 const makeStyles = ({ colors, spacing, radius, typography }) =>
   StyleSheet.create({
+    settingsScreen: {
+      flex: 1,
+      backgroundColor: colors.bg,
+      paddingTop: Platform.OS === 'ios' ? 44 : Platform.OS === 'web' ? 0 : spacing.lg,
+    },
+    settingsWindow: {
+      flex: 1,
+      backgroundColor: colors.bg,
+      width: '100%',
+    },
+    settingsWindowHeader: {
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    settingsHeader: {
+      minHeight: 48,
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.sm,
+      gap: spacing.sm,
+    },
+    settingsHeaderSide: {
+      width: 82,
+    },
+    settingsTitle: {
+      ...typography.title,
+      flex: 1,
+      fontSize: 20,
+      textAlign: 'center',
+    },
+    settingsScroll: {
+      flex: 1,
+    },
     backdrop: {
       flex: 1,
       backgroundColor: colors.overlay,
@@ -640,8 +624,12 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       fontWeight: '600',
       color: colors.primary,
     },
+    confirmText: {
+      textAlign: 'right',
+    },
     content: {
       paddingHorizontal: spacing.lg,
+      paddingTop: spacing.lg,
       paddingBottom: spacing.xl,
       gap: spacing.xl,
     },
