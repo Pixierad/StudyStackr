@@ -6,13 +6,27 @@ import ProfileAvatar from '../features/profile/ProfileAvatar';
 import { SORT_OPTIONS, STATUS_ONLY_FILTERS } from '../features/tasks/taskSorting';
 import { notificationTimeLabel } from './notifications';
 
-export function VersionBadge({ styles }) {
+function appVersionLabel() {
   const sha = process.env.EXPO_PUBLIC_APP_VERSION || 'dev';
   const built = process.env.EXPO_PUBLIC_APP_BUILT || '';
+  return `v.${sha}${built ? ' ' + built : ''}`;
+}
+
+export function VersionBadge({ styles }) {
   return (
     <View style={styles.versionBadge} pointerEvents="none">
       <Text style={styles.versionText}>
-        {`v.${sha}${built ? ' ' + built : ''}`}
+        {appVersionLabel()}
+      </Text>
+    </View>
+  );
+}
+
+export function DesktopVersionBadge({ styles }) {
+  return (
+    <View style={styles.desktopVersionBadge} pointerEvents="none">
+      <Text style={styles.desktopVersionText} numberOfLines={1}>
+        {appVersionLabel()}
       </Text>
     </View>
   );
@@ -78,6 +92,7 @@ const SIDEBAR_ITEMS = [
 
 export function DesktopSidebar({
   collapsed,
+  progress,
   profile,
   onToggle,
   onSubjects,
@@ -87,6 +102,22 @@ export function DesktopSidebar({
   styles,
   shadow,
 }) {
+  const sidebarWidth = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [64, 216],
+  });
+  const toggleWidth = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [40, 102],
+  });
+  const labelWidth = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 126],
+  });
+  const labelSlide = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-10, 0],
+  });
   const actions = {
     chats: onChats,
     subjects: onSubjects,
@@ -94,15 +125,28 @@ export function DesktopSidebar({
   };
 
   return (
-    <View style={[styles.desktopSidebar, collapsed && styles.desktopSidebarCollapsed, shadow.float]}>
+    <Animated.View style={[styles.desktopSidebar, { width: sidebarWidth }, shadow.float]}>
       <View style={styles.desktopSidebarHeader}>
         <Pressable
           onPress={onToggle}
           accessibilityRole="button"
           accessibilityLabel={collapsed ? 'Open sidebar' : 'Collapse sidebar'}
-          style={styles.desktopSidebarToggle}
         >
-          <Text style={styles.desktopSidebarToggleText}>{collapsed ? '>' : '<'}</Text>
+          <Animated.View style={[styles.desktopSidebarToggle, { width: toggleWidth }]}>
+            <View style={styles.desktopSidebarToggleIcon}>
+              <Text style={styles.desktopSidebarToggleText}>{collapsed ? '>' : '<'}</Text>
+            </View>
+            <Animated.View
+              style={[
+                styles.desktopSidebarToggleLabelWrap,
+                { width: labelWidth, opacity: progress, transform: [{ translateX: labelSlide }] },
+              ]}
+            >
+              <Text style={styles.desktopSidebarToggleLabel} numberOfLines={1}>
+                Hide
+              </Text>
+            </Animated.View>
+          </Animated.View>
         </Pressable>
       </View>
 
@@ -112,7 +156,9 @@ export function DesktopSidebar({
             key={item.key}
             label={item.label}
             icon={item.icon}
-            collapsed={collapsed}
+            labelWidth={labelWidth}
+            labelOpacity={progress}
+            labelSlide={labelSlide}
             onPress={actions[item.key]}
             styles={styles}
           />
@@ -130,23 +176,26 @@ export function DesktopSidebar({
           ]}
         >
           <ProfileAvatar profile={profile} size={34} />
-          {!collapsed ? (
-            <View style={styles.desktopSidebarProfileText}>
+          <Animated.View
+            style={[
+              styles.desktopSidebarProfileText,
+              { width: labelWidth, opacity: progress, transform: [{ translateX: labelSlide }] },
+            ]}
+          >
               <Text style={styles.desktopSidebarLabel} numberOfLines={1}>
                 Profile
               </Text>
               <Text style={styles.desktopSidebarMeta} numberOfLines={1}>
                 {profile?.username ? `@${profile.username}` : 'Your account'}
               </Text>
-            </View>
-          ) : null}
+          </Animated.View>
         </Pressable>
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
-function SidebarButton({ label, icon, collapsed, onPress, styles }) {
+function SidebarButton({ label, icon, labelWidth, labelOpacity, labelSlide, onPress, styles }) {
   return (
     <Pressable
       onPress={onPress}
@@ -158,11 +207,16 @@ function SidebarButton({ label, icon, collapsed, onPress, styles }) {
       ]}
     >
       <Text style={styles.desktopSidebarIcon}>{icon}</Text>
-      {!collapsed ? (
+      <Animated.View
+        style={[
+          styles.desktopSidebarLabelWrap,
+          { width: labelWidth, opacity: labelOpacity, transform: [{ translateX: labelSlide }] },
+        ]}
+      >
         <Text style={styles.desktopSidebarLabel} numberOfLines={1}>
           {label}
         </Text>
-      ) : null}
+      </Animated.View>
     </Pressable>
   );
 }

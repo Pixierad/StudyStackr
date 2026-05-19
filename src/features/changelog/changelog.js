@@ -17,6 +17,18 @@
 
 export const CHANGELOG = [
   {
+    version: '1.2.4',
+    date: '2026-05-19',
+    title: 'Even MORE QoL improvements',
+    notes: [
+      'Improvement: Split between mobile and desktop Web experience for ease of use on both platforms',
+      'Improvement: Sorted backend out to allow for easier pushes to multiplt services at once',
+      'Improvement: Chat is now fullscreen on all platforms',
+      'Upcoming: Potential Ko-Fi link or voluntary ads to allow me to push this service to mobile and keep it free for everyone :) (NO ADS ON FRONT PAGE I\'M NOT THAT BAD!)',
+      'Upcoming: More fluid web experience with more pages and less sheets for a more native feel',
+    ],
+  },
+  {
     version: '1.2.3',
     date: '2026-05-17',
     title: 'QoL improvements',

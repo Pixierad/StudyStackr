@@ -6,6 +6,7 @@ import {
   Pressable,
   StyleSheet,
   ActivityIndicator,
+  Animated,
   Platform,
   useWindowDimensions,
 } from 'react-native';
@@ -59,6 +60,7 @@ import ChatSheet from '../features/chat/ChatSheet';
 import {
   BottomActionBar,
   DesktopSidebar,
+  DesktopVersionBadge,
   NotificationBanner,
   NotificationsPanel,
   ProgressCard,
@@ -126,8 +128,25 @@ function AppContent() {
 
   const [taskFormResetKey, setTaskFormResetKey] = useState(0);
   const [resumeFormAfterSubjects, setResumeFormAfterSubjects] = useState(false);
+  const desktopSidebarProgressRef = useRef(null);
+  if (desktopSidebarProgressRef.current == null) {
+    desktopSidebarProgressRef.current = new Animated.Value(desktopSidebarCollapsed ? 0 : 1);
+  }
+  const desktopSidebarProgress = desktopSidebarProgressRef.current;
+  const desktopMainMarginLeft = desktopSidebarProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [96, 248],
+  });
   const notifiedFriendRequestsRef = useRef(new Set());
   const notifiedMessagesRef = useRef(new Set());
+
+  useEffect(() => {
+    Animated.timing(desktopSidebarProgress, {
+      toValue: desktopSidebarCollapsed ? 0 : 1,
+      duration: 240,
+      useNativeDriver: false,
+    }).start();
+  }, [desktopSidebarCollapsed, desktopSidebarProgress]);
 
   // Wire up Supabase auth listener (no-op in local-only mode).
   useEffect(() => {
@@ -626,6 +645,7 @@ function AppContent() {
       {isDesktopWeb ? (
         <DesktopSidebar
           collapsed={desktopSidebarCollapsed}
+          progress={desktopSidebarProgress}
           profile={profile}
           onToggle={() => setDesktopSidebarCollapsed((value) => !value)}
           onSubjects={() => setSubjectMgrVisible(true)}
@@ -637,10 +657,10 @@ function AppContent() {
         />
       ) : null}
 
-      <View
+      <Animated.View
         style={[
           isDesktopWeb ? styles.desktopMain : styles.mobileMain,
-          isDesktopWeb && desktopSidebarCollapsed && styles.desktopMainCollapsed,
+          isDesktopWeb && { marginLeft: desktopMainMarginLeft },
         ]}
       >
         <View style={[styles.header, isDesktopWeb && styles.desktopHeader]}>
@@ -649,6 +669,7 @@ function AppContent() {
           <Text style={styles.headerTitle}>Your tasks</Text>
         </View>
         <View style={styles.headerActions}>
+          {isDesktopWeb ? <DesktopVersionBadge styles={styles} /> : null}
           {isDesktopWeb ? (
             <Pressable
               onPress={openNewTask}
@@ -744,7 +765,7 @@ function AppContent() {
           />
         ) : null}
 
-      </View>
+      </Animated.View>
 
       <TaskForm
         visible={formVisible}
@@ -836,7 +857,7 @@ function AppContent() {
         shadow={shadow}
       />
 
-      <VersionBadge styles={styles} />
+      {!isDesktopWeb ? <VersionBadge styles={styles} /> : null}
     </SafeAreaView>
   );
 }
@@ -865,37 +886,36 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
     desktopMain: {
       flex: 1,
       minWidth: 0,
-      marginLeft: 248,
       paddingVertical: spacing.md,
-    },
-    desktopMainCollapsed: {
-      marginLeft: 96,
     },
     desktopSidebar: {
       position: 'absolute',
       top: spacing.lg,
       bottom: spacing.lg,
       left: spacing.lg,
-      width: 216,
       zIndex: 20,
       backgroundColor: colors.card,
       borderRadius: radius.lg,
       borderWidth: 1,
       borderColor: colors.border,
       paddingVertical: spacing.md,
-    },
-    desktopSidebarCollapsed: {
-      width: 64,
+      overflow: 'hidden',
     },
     desktopSidebarHeader: {
       paddingHorizontal: spacing.sm,
-      alignItems: 'flex-end',
+      alignItems: 'flex-start',
     },
     desktopSidebarToggle: {
-      width: 40,
       height: 40,
       borderRadius: radius.md,
       backgroundColor: colors.cardMuted,
+      alignItems: 'center',
+      flexDirection: 'row',
+      overflow: 'hidden',
+    },
+    desktopSidebarToggleIcon: {
+      width: 40,
+      height: 40,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -904,6 +924,16 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       fontSize: 18,
       fontWeight: '900',
       lineHeight: 20,
+    },
+    desktopSidebarToggleLabelWrap: {
+      height: 40,
+      justifyContent: 'center',
+      overflow: 'hidden',
+    },
+    desktopSidebarToggleLabel: {
+      color: colors.text,
+      fontSize: 13,
+      fontWeight: '900',
     },
     desktopSidebarNav: {
       flex: 1,
@@ -934,6 +964,9 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       fontSize: 15,
       fontWeight: '800',
     },
+    desktopSidebarLabelWrap: {
+      overflow: 'hidden',
+    },
     desktopSidebarFooter: {
       paddingHorizontal: spacing.sm,
       paddingTop: spacing.md,
@@ -949,8 +982,8 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       paddingHorizontal: spacing.sm,
     },
     desktopSidebarProfileText: {
-      flex: 1,
       minWidth: 0,
+      overflow: 'hidden',
     },
     desktopSidebarMeta: {
       color: colors.textMuted,
@@ -993,6 +1026,22 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
     desktopAddText: {
       color: '#fff',
       fontSize: 14,
+      fontWeight: '900',
+    },
+    desktopVersionBadge: {
+      minHeight: 36,
+      maxWidth: 220,
+      borderRadius: radius.pill,
+      backgroundColor: colors.primarySoft,
+      borderWidth: 1,
+      borderColor: colors.primary,
+      paddingHorizontal: spacing.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    desktopVersionText: {
+      color: colors.primary,
+      fontSize: 12,
       fontWeight: '900',
     },
     greeting: {
