@@ -66,7 +66,66 @@ $verifiedSha = (& git rev-parse --short HEAD).Trim()
 Write-Host "    HEAD $verifiedSha is signed and verified." -ForegroundColor Green
 
 Write-Host "[4/6] Pushing to GitHub..." -ForegroundColor Cyan
-git push
+$originUrl = (& git remote get-url origin 2>$null)
+if ($LASTEXITCODE -eq 0 -and $originUrl) {
+    $originUrl = $originUrl.Trim()
+} else {
+    $originUrl = ""
+}
+if ($LASTEXITCODE -ne 0 -or -not $originUrl) {
+    Write-Host ""
+    Write-Host "    Could not read the GitHub remote named 'origin'." -ForegroundColor Red
+    Write-Host "    Fix:" -ForegroundColor Yellow
+    Write-Host "      git remote add origin https://github.com/Pixierad/SchoolApp.git" -ForegroundColor Yellow
+    Write-Host ""
+    exit 1
+}
+
+$pushRemote = "origin"
+$pushRef = $null
+if ($originUrl -match '^https://[^/]+@github\.com/' -or $originUrl -match 'gh[pousr]_[A-Za-z0-9_]+') {
+    $currentBranch = (& git branch --show-current).Trim()
+    if (-not $currentBranch) {
+        Write-Host ""
+        Write-Host "    Your GitHub remote has an old username/token embedded in it, and Git cannot detect the current branch." -ForegroundColor Red
+        Write-Host ""
+        Write-Host "    Fix:" -ForegroundColor Yellow
+        Write-Host "      git remote set-url origin https://github.com/Pixierad/SchoolApp.git" -ForegroundColor Yellow
+        Write-Host "      git push" -ForegroundColor Yellow
+        Write-Host ""
+        exit 1
+    }
+
+    Write-Host ""
+    Write-Host "    Your saved GitHub remote has an old username/token embedded in it." -ForegroundColor Yellow
+    Write-Host "    Using a clean GitHub URL for this push so Git Credential Manager can sign you in." -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "    After this deploy, clean up the saved remote with:" -ForegroundColor Yellow
+    Write-Host "      git remote set-url origin https://github.com/Pixierad/SchoolApp.git" -ForegroundColor Yellow
+    Write-Host ""
+
+    $pushRemote = "https://github.com/Pixierad/SchoolApp.git"
+    $pushRef = "HEAD:$currentBranch"
+}
+
+if ($pushRef) {
+    git push $pushRemote $pushRef
+} else {
+    git push
+}
+if ($LASTEXITCODE -ne 0) {
+    Write-Host ""
+    Write-Host "    GitHub rejected the push." -ForegroundColor Red
+    Write-Host ""
+    Write-Host "    Fix:" -ForegroundColor Yellow
+    Write-Host '      "protocol=https`nhost=github.com`n`n" | git credential-manager erase' -ForegroundColor Yellow
+    Write-Host "      git push" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "    When Git Credential Manager prompts you, sign in to GitHub in the browser." -ForegroundColor Yellow
+    Write-Host "    Then run .\deploy.ps1 again." -ForegroundColor Yellow
+    Write-Host ""
+    exit 1
+}
 
 Write-Host "[5/6] Building web bundle..." -ForegroundColor Cyan
 
