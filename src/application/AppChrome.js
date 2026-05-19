@@ -70,6 +70,103 @@ export function BottomActionBar({
   );
 }
 
+const SIDEBAR_ITEMS = [
+  { key: 'chats', label: 'Chats', icon: '\u{1F4AC}' },
+  { key: 'subjects', label: 'Subjects', icon: '\u{1F4DA}' },
+  { key: 'friends', label: 'Friends', icon: '\u{1F465}' },
+];
+
+export function DesktopSidebar({
+  collapsed,
+  profile,
+  onToggle,
+  onSubjects,
+  onFriends,
+  onChats,
+  onProfile,
+  styles,
+  shadow,
+}) {
+  const actions = {
+    chats: onChats,
+    subjects: onSubjects,
+    friends: onFriends,
+  };
+
+  return (
+    <View style={[styles.desktopSidebar, collapsed && styles.desktopSidebarCollapsed, shadow.float]}>
+      <View style={styles.desktopSidebarHeader}>
+        <Pressable
+          onPress={onToggle}
+          accessibilityRole="button"
+          accessibilityLabel={collapsed ? 'Open sidebar' : 'Collapse sidebar'}
+          style={styles.desktopSidebarToggle}
+        >
+          <Text style={styles.desktopSidebarToggleText}>{collapsed ? '>' : '<'}</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.desktopSidebarNav}>
+        {SIDEBAR_ITEMS.map((item) => (
+          <SidebarButton
+            key={item.key}
+            label={item.label}
+            icon={item.icon}
+            collapsed={collapsed}
+            onPress={actions[item.key]}
+            styles={styles}
+          />
+        ))}
+      </View>
+
+      <View style={styles.desktopSidebarFooter}>
+        <Pressable
+          onPress={onProfile}
+          accessibilityRole="button"
+          accessibilityLabel="Open profile"
+          style={({ pressed }) => [
+            styles.desktopSidebarProfile,
+            pressed && styles.desktopSidebarButtonPressed,
+          ]}
+        >
+          <ProfileAvatar profile={profile} size={34} />
+          {!collapsed ? (
+            <View style={styles.desktopSidebarProfileText}>
+              <Text style={styles.desktopSidebarLabel} numberOfLines={1}>
+                Profile
+              </Text>
+              <Text style={styles.desktopSidebarMeta} numberOfLines={1}>
+                {profile?.username ? `@${profile.username}` : 'Your account'}
+              </Text>
+            </View>
+          ) : null}
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function SidebarButton({ label, icon, collapsed, onPress, styles }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={({ pressed }) => [
+        styles.desktopSidebarButton,
+        pressed && styles.desktopSidebarButtonPressed,
+      ]}
+    >
+      <Text style={styles.desktopSidebarIcon}>{icon}</Text>
+      {!collapsed ? (
+        <Text style={styles.desktopSidebarLabel} numberOfLines={1}>
+          {label}
+        </Text>
+      ) : null}
+    </Pressable>
+  );
+}
+
 function BarButton({ label, icon, avatar, onPress, accessibilityLabel, styles }) {
   return (
     <Pressable
@@ -297,4 +394,3 @@ export function NotificationsPanel({
     </Modal>
   );
 }
-

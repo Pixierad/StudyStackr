@@ -7,6 +7,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Platform,
+  useWindowDimensions,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -57,6 +58,7 @@ import FriendsSheet from '../features/friends/FriendsSheet';
 import ChatSheet from '../features/chat/ChatSheet';
 import {
   BottomActionBar,
+  DesktopSidebar,
   NotificationBanner,
   NotificationsPanel,
   ProgressCard,
@@ -86,10 +88,12 @@ export default function App() {
 
 function AppContent() {
   const { colors, spacing, radius, typography, shadow, isDark } = useTheme();
+  const { width } = useWindowDimensions();
   const styles = useMemo(
     () => makeStyles({ colors, spacing, radius, typography }),
     [colors, spacing, radius, typography]
   );
+  const isDesktopWeb = Platform.OS === 'web' && width >= 900;
 
   const [tasks, setTasks] = useState([]);
   const [subjects, setSubjects] = useState([]);
@@ -118,6 +122,7 @@ function AppContent() {
   const [syncError, setSyncError] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [activeBanner, setActiveBanner] = useState(null);
+  const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = useState(false);
 
   const [taskFormResetKey, setTaskFormResetKey] = useState(0);
   const [resumeFormAfterSubjects, setResumeFormAfterSubjects] = useState(false);
@@ -618,12 +623,42 @@ function AppContent() {
     <SafeAreaView style={styles.root} edges={['top', 'left', 'right']}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
 
-      <View style={styles.header}>
+      {isDesktopWeb ? (
+        <DesktopSidebar
+          collapsed={desktopSidebarCollapsed}
+          profile={profile}
+          onToggle={() => setDesktopSidebarCollapsed((value) => !value)}
+          onSubjects={() => setSubjectMgrVisible(true)}
+          onFriends={() => setFriendsVisible(true)}
+          onChats={() => setChatsVisible(true)}
+          onProfile={() => setProfileVisible(true)}
+          styles={styles}
+          shadow={shadow}
+        />
+      ) : null}
+
+      <View
+        style={[
+          isDesktopWeb ? styles.desktopMain : styles.mobileMain,
+          isDesktopWeb && desktopSidebarCollapsed && styles.desktopMainCollapsed,
+        ]}
+      >
+        <View style={[styles.header, isDesktopWeb && styles.desktopHeader]}>
         <View style={{ flex: 1 }}>
           <Text style={styles.greeting}>{greeting(publicName(profile))}</Text>
           <Text style={styles.headerTitle}>Your tasks</Text>
         </View>
         <View style={styles.headerActions}>
+          {isDesktopWeb ? (
+            <Pressable
+              onPress={openNewTask}
+              style={styles.desktopAddBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Add task"
+            >
+              <Text style={styles.desktopAddText}>+ Add task</Text>
+            </Pressable>
+          ) : null}
           <Pressable
             onPress={() => setNotificationsVisible(true)}
             style={styles.iconBtn}
@@ -657,52 +692,59 @@ function AppContent() {
             {hasUnreadChangelog ? <View style={styles.unreadDot} /> : null}
           </Pressable>
         </View>
+        </View>
+
+        <ProgressCard progress={progress} styles={styles} />
+
+        {syncError ? (
+          <SyncErrorBanner message={syncError} onDismiss={() => setSyncError(null)} styles={styles} />
+        ) : null}
+
+        <FilterTabs value={filter} onChange={setFilter} counts={counts} />
+
+        <SortControls value={sortMode} onChange={setSortMode} filter={filter} styles={styles} />
+
+        <FlatList
+          data={filtered}
+          keyExtractor={(item) => item.id}
+          style={styles.list}
+          contentContainerStyle={[
+            styles.listContent,
+            isDesktopWeb && styles.desktopListContent,
+          ]}
+          ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
+          renderItem={({ item }) => (
+            <TaskCard
+              task={item}
+              subjects={subjects}
+              onToggle={() => toggleDone(item.id)}
+              onPress={() => openEditTask(item)}
+              onDelete={() => quickDeleteTask(item.id)}
+            />
+          )}
+          ListEmptyComponent={
+            <EmptyState
+              title={emptyTitleFor(filter, tasks.length)}
+              subtitle={emptySubtitleFor(filter, tasks.length)}
+              icon={emptyIconFor(filter, tasks.length)}
+            />
+          }
+        />
+
+        {!isDesktopWeb ? (
+          <BottomActionBar
+            profile={profile}
+            onProfile={() => setProfileVisible(true)}
+            onAddTask={openNewTask}
+            onSubjects={() => setSubjectMgrVisible(true)}
+            onFriends={() => setFriendsVisible(true)}
+            onChats={() => setChatsVisible(true)}
+            styles={styles}
+            shadow={shadow}
+          />
+        ) : null}
+
       </View>
-
-      <ProgressCard progress={progress} styles={styles} />
-
-      {syncError ? (
-        <SyncErrorBanner message={syncError} onDismiss={() => setSyncError(null)} styles={styles} />
-      ) : null}
-
-      <FilterTabs value={filter} onChange={setFilter} counts={counts} />
-
-      <SortControls value={sortMode} onChange={setSortMode} filter={filter} styles={styles} />
-
-      <FlatList
-        data={filtered}
-        keyExtractor={(item) => item.id}
-        style={styles.list}
-        contentContainerStyle={styles.listContent}
-        ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
-        renderItem={({ item }) => (
-          <TaskCard
-            task={item}
-            subjects={subjects}
-            onToggle={() => toggleDone(item.id)}
-            onPress={() => openEditTask(item)}
-            onDelete={() => quickDeleteTask(item.id)}
-          />
-        )}
-        ListEmptyComponent={
-          <EmptyState
-            title={emptyTitleFor(filter, tasks.length)}
-            subtitle={emptySubtitleFor(filter, tasks.length)}
-            icon={emptyIconFor(filter, tasks.length)}
-          />
-        }
-      />
-
-      <BottomActionBar
-        profile={profile}
-        onProfile={() => setProfileVisible(true)}
-        onAddTask={openNewTask}
-        onSubjects={() => setSubjectMgrVisible(true)}
-        onFriends={() => setFriendsVisible(true)}
-        onChats={() => setChatsVisible(true)}
-        styles={styles}
-        shadow={shadow}
-      />
 
       <TaskForm
         visible={formVisible}
@@ -817,6 +859,105 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       display: 'flex',
       flexDirection: 'column',
     },
+    mobileMain: {
+      flex: 1,
+    },
+    desktopMain: {
+      flex: 1,
+      minWidth: 0,
+      marginLeft: 248,
+      paddingVertical: spacing.md,
+    },
+    desktopMainCollapsed: {
+      marginLeft: 96,
+    },
+    desktopSidebar: {
+      position: 'absolute',
+      top: spacing.lg,
+      bottom: spacing.lg,
+      left: spacing.lg,
+      width: 216,
+      zIndex: 20,
+      backgroundColor: colors.card,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingVertical: spacing.md,
+    },
+    desktopSidebarCollapsed: {
+      width: 64,
+    },
+    desktopSidebarHeader: {
+      paddingHorizontal: spacing.sm,
+      alignItems: 'flex-end',
+    },
+    desktopSidebarToggle: {
+      width: 40,
+      height: 40,
+      borderRadius: radius.md,
+      backgroundColor: colors.cardMuted,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    desktopSidebarToggleText: {
+      color: colors.text,
+      fontSize: 18,
+      fontWeight: '900',
+      lineHeight: 20,
+    },
+    desktopSidebarNav: {
+      flex: 1,
+      gap: spacing.sm,
+      paddingHorizontal: spacing.sm,
+      paddingTop: spacing.lg,
+    },
+    desktopSidebarButton: {
+      minHeight: 48,
+      borderRadius: radius.md,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      paddingHorizontal: spacing.md,
+      backgroundColor: 'transparent',
+    },
+    desktopSidebarButtonPressed: {
+      backgroundColor: colors.cardMuted,
+    },
+    desktopSidebarIcon: {
+      width: 24,
+      textAlign: 'center',
+      fontSize: 20,
+      lineHeight: 24,
+    },
+    desktopSidebarLabel: {
+      color: colors.text,
+      fontSize: 15,
+      fontWeight: '800',
+    },
+    desktopSidebarFooter: {
+      paddingHorizontal: spacing.sm,
+      paddingTop: spacing.md,
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+    },
+    desktopSidebarProfile: {
+      minHeight: 54,
+      borderRadius: radius.md,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      paddingHorizontal: spacing.sm,
+    },
+    desktopSidebarProfileText: {
+      flex: 1,
+      minWidth: 0,
+    },
+    desktopSidebarMeta: {
+      color: colors.textMuted,
+      fontSize: 12,
+      fontWeight: '600',
+      marginTop: 2,
+    },
     loadingWrap: {
       flex: 1,
       backgroundColor: colors.bg,
@@ -831,10 +972,28 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       paddingBottom: spacing.sm,
       gap: spacing.md,
     },
+    desktopHeader: {
+      paddingHorizontal: spacing.xl,
+      paddingTop: spacing.sm,
+      paddingBottom: spacing.md,
+    },
     headerActions: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: spacing.sm,
+    },
+    desktopAddBtn: {
+      minHeight: 44,
+      borderRadius: radius.pill,
+      backgroundColor: colors.primary,
+      paddingHorizontal: spacing.lg,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    desktopAddText: {
+      color: '#fff',
+      fontSize: 14,
+      fontWeight: '900',
     },
     greeting: {
       ...typography.caption,
@@ -1112,6 +1271,10 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       paddingTop: spacing.xs,
       paddingBottom: 136,
       flexGrow: 1,
+    },
+    desktopListContent: {
+      paddingHorizontal: spacing.xl,
+      paddingBottom: spacing.xxl,
     },
     bottomBar: {
       position: 'absolute',
