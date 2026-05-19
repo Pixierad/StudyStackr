@@ -178,7 +178,7 @@ export const THEME_PRESETS = {
     description: 'Deep blue like a starlit sky.',
   },
   shadow: {
-    label: 'Shadow Zone',
+    label: 'Spooky',
     emoji: '🗡️',
     isDark: true,
     surface: {
