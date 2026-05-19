@@ -15,8 +15,8 @@ import {
   Dimensions,
   ScrollView,
 } from 'react-native';
-import { useTheme } from '../theme';
-import { resolveSubjectStyle, SUBJECT_COLOR_PRESETS } from '../utils/subjects';
+import { useTheme } from '../../shared/theme';
+import { resolveSubjectStyle, SUBJECT_COLOR_PRESETS } from '../../shared/utils/subjects';
 
 export default function SubjectManager({
   visible,

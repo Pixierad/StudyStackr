@@ -1097,3 +1097,342 @@ begin
   end if;
 end;
 $$;
+
+-- ------------------------------------------------------------------
+-- Security hardening for exposed RPC functions.
+--
+-- Supabase exposes functions in the public schema through /rest/v1/rpc.
+-- The app needs these RPCs to be callable by signed-in users, but the
+-- privileged SECURITY DEFINER bodies should not be directly exposed from
+-- that public API schema. This block moves the privileged implementations
+-- into a private schema, then recreates public SECURITY INVOKER wrappers
+-- with the same names/signatures used by the app.
+-- ------------------------------------------------------------------
+
+create schema if not exists private;
+
+revoke all on schema private from public, anon;
+grant usage on schema private to authenticated;
+
+create or replace function public.set_updated_at()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+revoke execute on function public.set_updated_at() from public, anon, authenticated;
+
+revoke execute on function public.handle_new_user() from public, anon, authenticated;
+alter function public.handle_new_user() set search_path = public;
+
+do $$
+begin
+  if to_regprocedure('public.rls_auto_enable()') is not null then
+    execute 'revoke execute on function public.rls_auto_enable() from public, anon, authenticated';
+    execute 'alter function public.rls_auto_enable() set search_path = public';
+  end if;
+end;
+$$;
+
+drop function if exists private.search_profiles(text);
+alter function public.search_profiles(text) set schema private;
+create function public.search_profiles(search_term text)
+returns table (
+  id uuid,
+  name text,
+  username text,
+  avatar_type text,
+  avatar_value text,
+  is_friend boolean,
+  incoming_request boolean,
+  outgoing_request boolean
+)
+language sql
+security invoker
+set search_path = public, private
+as $$
+  select *
+  from private.search_profiles(search_term);
+$$;
+
+drop function if exists private.list_friends();
+alter function public.list_friends() set schema private;
+create function public.list_friends()
+returns table (
+  id uuid,
+  name text,
+  username text,
+  avatar_type text,
+  avatar_value text,
+  friended_at timestamptz
+)
+language sql
+security invoker
+set search_path = public, private
+as $$
+  select *
+  from private.list_friends();
+$$;
+
+drop function if exists private.list_friend_requests();
+alter function public.list_friend_requests() set schema private;
+create function public.list_friend_requests()
+returns table (
+  id uuid,
+  name text,
+  username text,
+  avatar_type text,
+  avatar_value text,
+  requester_id uuid,
+  addressee_id uuid,
+  direction text,
+  created_at timestamptz
+)
+language sql
+security invoker
+set search_path = public, private
+as $$
+  select *
+  from private.list_friend_requests();
+$$;
+
+drop function if exists private.add_friend(uuid);
+alter function public.add_friend(uuid) set schema private;
+create function public.add_friend(friend_profile_id uuid)
+returns void
+language sql
+security invoker
+set search_path = public, private
+as $$
+  select private.add_friend(friend_profile_id);
+$$;
+
+drop function if exists private.accept_friend_request(uuid);
+alter function public.accept_friend_request(uuid) set schema private;
+create function public.accept_friend_request(requester_profile_id uuid)
+returns void
+language sql
+security invoker
+set search_path = public, private
+as $$
+  select private.accept_friend_request(requester_profile_id);
+$$;
+
+drop function if exists private.decline_friend_request(uuid);
+alter function public.decline_friend_request(uuid) set schema private;
+create function public.decline_friend_request(requester_profile_id uuid)
+returns void
+language sql
+security invoker
+set search_path = public, private
+as $$
+  select private.decline_friend_request(requester_profile_id);
+$$;
+
+drop function if exists private.remove_friend(uuid);
+alter function public.remove_friend(uuid) set schema private;
+create function public.remove_friend(friend_profile_id uuid)
+returns void
+language sql
+security invoker
+set search_path = public, private
+as $$
+  select private.remove_friend(friend_profile_id);
+$$;
+
+drop function if exists private.chat_member_profiles(uuid);
+alter function public.chat_member_profiles(uuid) set schema private;
+create function public.chat_member_profiles(room_profile_id uuid)
+returns jsonb
+language sql
+security invoker
+set search_path = public, private
+as $$
+  select private.chat_member_profiles(room_profile_id);
+$$;
+
+drop function if exists private.create_chat_room(text, uuid[], integer);
+alter function public.create_chat_room(text, uuid[], integer) set schema private;
+create function public.create_chat_room(
+  room_name text,
+  friend_ids uuid[],
+  lifetime_hours integer default 24
+)
+returns uuid
+language sql
+security invoker
+set search_path = public, private
+as $$
+  select private.create_chat_room(room_name, friend_ids, lifetime_hours);
+$$;
+
+drop function if exists private.rename_chat_room(uuid, text);
+alter function public.rename_chat_room(uuid, text) set schema private;
+create function public.rename_chat_room(room_profile_id uuid, room_name text)
+returns void
+language sql
+security invoker
+set search_path = public, private
+as $$
+  select private.rename_chat_room(room_profile_id, room_name);
+$$;
+
+drop function if exists private.add_chat_participants(uuid, uuid[]);
+alter function public.add_chat_participants(uuid, uuid[]) set schema private;
+create function public.add_chat_participants(room_profile_id uuid, friend_ids uuid[])
+returns void
+language sql
+security invoker
+set search_path = public, private
+as $$
+  select private.add_chat_participants(room_profile_id, friend_ids);
+$$;
+
+drop function if exists private.cleanup_expired_chat_rooms();
+alter function public.cleanup_expired_chat_rooms() set schema private;
+create function public.cleanup_expired_chat_rooms()
+returns bigint
+language sql
+security invoker
+set search_path = public, private
+as $$
+  select private.cleanup_expired_chat_rooms();
+$$;
+
+drop function if exists private.list_chat_rooms();
+alter function public.list_chat_rooms() set schema private;
+create function public.list_chat_rooms()
+returns table (
+  id uuid,
+  name text,
+  created_by uuid,
+  created_at timestamptz,
+  expires_at timestamptz,
+  is_pinned boolean,
+  last_read_at timestamptz,
+  last_message_body text,
+  last_message_at timestamptz,
+  unread_count bigint,
+  members jsonb
+)
+language sql
+security invoker
+set search_path = public, private
+as $$
+  select *
+  from private.list_chat_rooms();
+$$;
+
+drop function if exists private.list_chat_messages(uuid);
+alter function public.list_chat_messages(uuid) set schema private;
+create function public.list_chat_messages(room_profile_id uuid)
+returns table (
+  id uuid,
+  room_id uuid,
+  sender_id uuid,
+  body text,
+  created_at timestamptz,
+  sender_name text,
+  sender_username text,
+  sender_avatar_type text,
+  sender_avatar_value text,
+  message_type text
+)
+language sql
+security invoker
+set search_path = public, private
+as $$
+  select *
+  from private.list_chat_messages(room_profile_id);
+$$;
+
+drop function if exists private.send_chat_message(uuid, text);
+alter function public.send_chat_message(uuid, text) set schema private;
+create function public.send_chat_message(room_profile_id uuid, message_body text)
+returns uuid
+language sql
+security invoker
+set search_path = public, private
+as $$
+  select private.send_chat_message(room_profile_id, message_body);
+$$;
+
+drop function if exists private.mark_chat_read(uuid);
+alter function public.mark_chat_read(uuid) set schema private;
+create function public.mark_chat_read(room_profile_id uuid)
+returns void
+language sql
+security invoker
+set search_path = public, private
+as $$
+  select private.mark_chat_read(room_profile_id);
+$$;
+
+drop function if exists private.set_chat_pinned(uuid, boolean);
+alter function public.set_chat_pinned(uuid, boolean) set schema private;
+create function public.set_chat_pinned(room_profile_id uuid, pinned boolean)
+returns void
+language sql
+security invoker
+set search_path = public, private
+as $$
+  select private.set_chat_pinned(room_profile_id, pinned);
+$$;
+
+drop function if exists private.hide_chat_room(uuid);
+alter function public.hide_chat_room(uuid) set schema private;
+create function public.hide_chat_room(room_profile_id uuid)
+returns void
+language sql
+security invoker
+set search_path = public, private
+as $$
+  select private.hide_chat_room(room_profile_id);
+$$;
+
+revoke execute on all functions in schema private from public, anon;
+grant execute on all functions in schema private to authenticated;
+
+revoke execute on function public.search_profiles(text) from public, anon;
+revoke execute on function public.list_friends() from public, anon;
+revoke execute on function public.list_friend_requests() from public, anon;
+revoke execute on function public.add_friend(uuid) from public, anon;
+revoke execute on function public.accept_friend_request(uuid) from public, anon;
+revoke execute on function public.decline_friend_request(uuid) from public, anon;
+revoke execute on function public.remove_friend(uuid) from public, anon;
+revoke execute on function public.chat_member_profiles(uuid) from public, anon;
+revoke execute on function public.create_chat_room(text, uuid[], integer) from public, anon;
+revoke execute on function public.rename_chat_room(uuid, text) from public, anon;
+revoke execute on function public.add_chat_participants(uuid, uuid[]) from public, anon;
+revoke execute on function public.cleanup_expired_chat_rooms() from public, anon;
+revoke execute on function public.list_chat_rooms() from public, anon;
+revoke execute on function public.list_chat_messages(uuid) from public, anon;
+revoke execute on function public.send_chat_message(uuid, text) from public, anon;
+revoke execute on function public.mark_chat_read(uuid) from public, anon;
+revoke execute on function public.set_chat_pinned(uuid, boolean) from public, anon;
+revoke execute on function public.hide_chat_room(uuid) from public, anon;
+
+grant execute on function public.search_profiles(text) to authenticated;
+grant execute on function public.list_friends() to authenticated;
+grant execute on function public.list_friend_requests() to authenticated;
+grant execute on function public.add_friend(uuid) to authenticated;
+grant execute on function public.accept_friend_request(uuid) to authenticated;
+grant execute on function public.decline_friend_request(uuid) to authenticated;
+grant execute on function public.remove_friend(uuid) to authenticated;
+grant execute on function public.chat_member_profiles(uuid) to authenticated;
+grant execute on function public.create_chat_room(text, uuid[], integer) to authenticated;
+grant execute on function public.rename_chat_room(uuid, text) to authenticated;
+grant execute on function public.add_chat_participants(uuid, uuid[]) to authenticated;
+grant execute on function public.cleanup_expired_chat_rooms() to authenticated;
+grant execute on function public.list_chat_rooms() to authenticated;
+grant execute on function public.list_chat_messages(uuid) to authenticated;
+grant execute on function public.send_chat_message(uuid, text) to authenticated;
+grant execute on function public.mark_chat_read(uuid) to authenticated;
+grant execute on function public.set_chat_pinned(uuid, boolean) to authenticated;
+grant execute on function public.hide_chat_room(uuid) to authenticated;

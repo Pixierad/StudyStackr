@@ -1,8 +1,8 @@
 import React, { useMemo } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { useTheme } from '../theme';
-import { resolveSubjectStyle } from '../utils/subjects';
-import { relativeLabel, dueStatus } from '../utils/dates';
+import { useTheme } from '../../../shared/theme';
+import { resolveSubjectStyle } from '../../../shared/utils/subjects';
+import { relativeLabel, dueStatus } from '../../../shared/utils/dates';
 
 export default function TaskCard({ task, subjects = [], onToggle, onPress, onDelete }) {
   const { colors, spacing, radius, typography, shadow, colorForSubject, isDark } = useTheme();

@@ -29,7 +29,7 @@ export const supabase = isSupabaseConfigured
     })
   : null;
 
-// Convenience helper used by storage.js -- returns the current user id
+// Convenience helper used by the storage service -- returns the current user id
 // (or null if signed out / not configured). Throws no errors.
 export async function currentUserId() {
   if (!supabase) return null;

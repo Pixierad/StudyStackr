@@ -8,7 +8,7 @@
 //   * Pure presentational: takes the current changelog data as a prop so
 //     the screen never depends on a fetch.
 //
-// Architectural note: the entries themselves live in src/changelog.js so
+// Architectural note: the entries themselves live next to this sheet so
 // release notes can be reviewed in code review (and bumped in the same
 // commit as the feature being shipped).
 
@@ -25,8 +25,8 @@ import {
   PanResponder,
   Platform,
 } from 'react-native';
-import { useTheme } from '../theme';
-import { saveChangelogLastSeen } from '../storage';
+import { useTheme } from '../../shared/theme';
+import { saveChangelogLastSeen } from './changelogRepository';
 
 export default function ChangelogSheet({ visible, entries = [], onClose }) {
   const { colors, spacing, radius, typography, shadow } = useTheme();

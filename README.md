@@ -20,30 +20,26 @@ A clean Expo app for tracking schoolwork across web and mobile. Create tasks, ta
 
 ```text
 SchoolApp/
-├── App.js                         Main app shell, auth-aware loading, filters, modals
-├── app.json                       Expo app config
-├── package.json                   Scripts and dependencies
-├── deploy.ps1                     Signed commit, web export, and Vercel deploy helper
-├── supabase-setup.sql             Supabase tables, RLS policies, indexes, profile trigger
-├── vercel.json                    Vercel static hosting config
-├── assets/                        App icons and splash assets
-└── src/
-    ├── supabase.js                Supabase client and session helper
-    ├── storage.js                 Data access layer with Supabase + local cache fallback
-    ├── theme.js                   Theme tokens, custom themes, persistence
-    ├── changelog.js               In-app release notes
-    ├── utils/
-    │   ├── dates.js               Date formatting and due status helpers
-    │   └── subjects.js            Subject lookup and color helpers
-    └── components/
-        ├── AuthScreen.js
-        ├── ChangelogSheet.js
-        ├── EmptyState.js
-        ├── FilterTabs.js
-        ├── SettingsSheet.js
-        ├── SubjectManager.js
-        ├── TaskCard.js
-        └── TaskForm.js
+|-- App.js                         Expo entry point
+|-- app.json                       Expo app config
+|-- package.json                   Web/mobile scripts and dependencies
+|-- deploy.ps1                     Signed commit, web export, and Vercel deploy helper
+|-- supabase-setup.sql             Supabase tables, RLS policies, indexes, profile trigger
+|-- vercel.json                    Vercel static hosting config
+|-- assets/                        App icons and splash assets
+`-- src/
+    |-- application/               Root orchestration, app chrome, notification helpers
+    |-- features/                  Feature-owned UI and repository scripts
+    |   |-- auth/
+    |   |-- changelog/
+    |   |-- chat/
+    |   |-- friends/
+    |   |-- profile/
+    |   |-- settings/
+    |   |-- subjects/
+    |   `-- tasks/
+    |-- services/                  Supabase client and shared storage backend
+    `-- shared/                    Reusable components, theme, platform adapters, utilities
 ```
 
 ## Setup
@@ -62,10 +58,16 @@ Copy-Item .env.local.example .env.local
 
 Then run the SQL in `supabase-setup.sql` inside the Supabase SQL Editor. It creates `profiles`, `friends`, `subjects`, and `tasks`, enables row-level security, and adds per-user policies.
 
-Start the app:
+Start the web app:
 
 ```powershell
-npm run web
+npm run dev:web
+```
+
+Start the mobile app:
+
+```powershell
+npm run dev:mobile
 ```
 
 ## Data Model

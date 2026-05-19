@@ -15,9 +15,9 @@ import {
   PanResponder,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { useTheme } from '../theme';
-import { toISODate, fromISODate, relativeLabel } from '../utils/dates';
-import { findSubject, resolveSubjectStyle } from '../utils/subjects';
+import { useTheme } from '../../../shared/theme';
+import { toISODate, fromISODate, relativeLabel } from '../../../shared/utils/dates';
+import { findSubject, resolveSubjectStyle } from '../../../shared/utils/subjects';
 
 export default function TaskForm({
   visible,

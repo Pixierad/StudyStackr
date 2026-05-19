@@ -14,7 +14,7 @@ import {
   Platform,
 } from 'react-native';
 
-import { useTheme } from '../theme';
+import { useTheme } from '../../shared/theme';
 import {
   acceptFriendRequest,
   addFriend,
@@ -25,9 +25,9 @@ import {
   loadFriends,
   removeFriend,
   searchProfiles,
-} from '../storage';
-import { publicName } from '../profile';
-import ProfileAvatar from './ProfileAvatar';
+} from './friendsRepository';
+import { publicName } from '../../shared/profile';
+import ProfileAvatar from '../profile/ProfileAvatar';
 
 export default function FriendsSheet({ visible, onClose, session = null }) {
   const { colors, spacing, radius, typography, shadow } = useTheme();

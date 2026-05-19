@@ -11,7 +11,7 @@
 //        emails a 6-digit code ({{ .Token }} in the email template).
 //     2. verifyOtp({ email, token, type: 'email' }) -- logs the user in.
 //
-// On success the onAuthStateChange listener in App.js takes over.
+// On success the root auth-state listener takes over.
 // Shown whenever Supabase is configured but no session is present.
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
@@ -26,8 +26,9 @@ import {
   Platform,
   ScrollView,
 } from 'react-native';
-import { useTheme } from '../theme';
-import { supabase } from '../supabase';
+import { useTheme } from '../../shared/theme';
+import { supabase } from '../../services/supabase';
+import { isLocalAdminCredentials } from './localAdminCredentials';
 
 const RESEND_COOLDOWN_SECONDS = 30;
 
@@ -40,7 +41,7 @@ const RESEND_COOLDOWN_SECONDS = 30;
 // dashboard (Auth → Providers → Email).
 const REQUIRE_EMAIL_CONFIRMATION = false;
 
-export default function AuthScreen() {
+export default function AuthScreen({ onLocalAdminSignIn }) {
   const { colors, spacing, radius, typography, shadow } = useTheme();
   const styles = useMemo(
     () => makeStyles({ colors, spacing, radius, typography }),
@@ -79,6 +80,7 @@ export default function AuthScreen() {
   const isValidEmail = (v) =>
     /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.trim());
   const isSignIn = pwMode === 'signin';
+  const isLocalAdminLogin = isSignIn && isLocalAdminCredentials(trimmedEmail, password);
 
   // 8 character minimum aligns with NIST SP 800-63B §5.1.1.2 guidance.
   const PASSWORD_MIN_LENGTH = 8;
@@ -101,10 +103,18 @@ export default function AuthScreen() {
 
   // ── Password flow ────────────────────────────────────────────────────────
   const canSubmitPassword =
-    isValidEmail(trimmedEmail) && password.length >= PASSWORD_MIN_LENGTH && !busy;
+    ((isSignIn && isLocalAdminLogin) ||
+      (isValidEmail(trimmedEmail) && password.length >= PASSWORD_MIN_LENGTH)) &&
+    !busy;
 
   const submitPassword = async () => {
-    if (!canSubmitPassword || !supabase) return;
+    if (!canSubmitPassword) return;
+    if (isLocalAdminLogin) {
+      clearMessages();
+      onLocalAdminSignIn?.();
+      return;
+    }
+    if (!supabase) return;
     setBusy(true);
     clearMessages();
     try {
@@ -114,7 +124,7 @@ export default function AuthScreen() {
           password,
         });
         if (err) throw err;
-        // Success -- App.js auth listener takes over.
+        // Success -- the root auth listener takes over.
       } else {
         const { data, error: err } = await supabase.auth.signUp({
           email: trimmedEmail,
@@ -191,7 +201,7 @@ export default function AuthScreen() {
         type: 'email',
       });
       if (err) throw err;
-      // Success -- App.js auth listener takes over.
+      // Success -- the root auth listener takes over.
     } catch (e) {
       setError(e?.message || 'That code didn’t work. Try again.');
     } finally {
@@ -249,7 +259,7 @@ export default function AuthScreen() {
               <TextInput
                 value={email}
                 onChangeText={setEmail}
-                placeholder="you@example.com"
+                placeholder="you@example.com or test"
                 placeholderTextColor={colors.textFaint}
                 style={styles.input}
                 autoCapitalize="none"

@@ -1,8 +1,8 @@
 import React, { useMemo } from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
 
-import { normalizeProfile } from '../profile';
-import { useTheme } from '../theme';
+import { normalizeProfile } from '../../shared/profile';
+import { useTheme } from '../../shared/theme';
 
 export default function ProfileAvatar({ profile, size = 44, style }) {
   const { colors, radius } = useTheme();

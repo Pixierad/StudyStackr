@@ -13,7 +13,7 @@ import {
   Platform,
 } from 'react-native';
 
-import { useTheme } from '../theme';
+import { useTheme } from '../../shared/theme';
 import {
   addChatParticipants,
   addFriend,
@@ -30,9 +30,9 @@ import {
   sendChatMessage,
   setChatPinned,
   subscribeToChatRoom,
-} from '../storage';
-import { normalizeUsername, publicName } from '../profile';
-import ProfileAvatar from './ProfileAvatar';
+} from './chatRepository';
+import { normalizeUsername, publicName } from '../../shared/profile';
+import ProfileAvatar from '../profile/ProfileAvatar';
 
 const DURATION_OPTIONS = [
   { label: '1h', hours: 1 },

@@ -14,9 +14,9 @@ import {
   Alert,
 } from 'react-native';
 
-import { useTheme } from '../theme';
-import { AVATAR_EMOJIS, isValidUsername, normalizeProfile, normalizeUsername } from '../profile';
-import { MAX_PROFILE_IMAGE_BYTES, pickProfileImage } from '../utils/pickProfileImage';
+import { useTheme } from '../../shared/theme';
+import { AVATAR_EMOJIS, isValidUsername, normalizeProfile, normalizeUsername } from '../../shared/profile';
+import { MAX_PROFILE_IMAGE_BYTES, pickProfileImage } from '../../shared/platform/pickProfileImage';
 import ProfileAvatar from './ProfileAvatar';
 
 export default function ProfileSheet({

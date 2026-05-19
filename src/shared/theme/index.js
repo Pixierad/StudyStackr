@@ -14,7 +14,7 @@
 
 import React, { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { supabase, isSupabaseConfigured } from './supabase';
+import { supabase, isSupabaseConfigured } from '../../services/supabase';
 
 // ── Static tokens ───────────────────────────────────────────────────────────
 

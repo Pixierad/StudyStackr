@@ -10,8 +10,8 @@
 //
 // Callers import the top-level helpers (loadTasks, upsertTask, deleteTask,
 // loadSubjects, upsertSubject, deleteSubject, loadProfile, saveProfile, ...)
-// and don't need to care which backend is active. App.js picks up an auth
-// state listener to re-load when the user signs in/out.
+// and don't need to care which backend is active. The root auth-state listener
+// re-loads data when the user signs in/out.
 //
 // IMPORTANT design notes (see code-review):
 //   1. We perform per-row mutations (upsertTask / deleteTask) instead of
@@ -26,8 +26,8 @@
 //      a pre-Supabase build don't silently lose their tasks/subjects.
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { supabase, isSupabaseConfigured, currentUserId } from './supabase';
-import { DEFAULT_AVATAR_EMOJI, normalizeProfile } from './profile';
+import { supabase, isSupabaseConfigured, currentUserId } from '../supabase';
+import { DEFAULT_AVATAR_EMOJI, normalizeProfile } from '../../shared/profile';
 
 // ── Local keys ─────────────────────────────────────────────────────────────
 // The legacy keys (no user id) are preserved so existing local-only data

@@ -20,7 +20,7 @@ import {
   previewColorsFor,
   isValidHex,
   softFromPrimary,
-} from '../theme';
+} from '../../shared/theme';
 
 // A palette of pickable primary colors for the custom-theme builder. Users
 // can also type a hex code manually.
