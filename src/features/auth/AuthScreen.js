@@ -20,6 +20,7 @@ import {
   Text,
   TextInput,
   Pressable,
+  Modal,
   StyleSheet,
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -31,6 +32,38 @@ import { supabase } from '../../services/supabase';
 import { isLocalAdminCredentials } from './localAdminCredentials';
 
 const RESEND_COOLDOWN_SECONDS = 30;
+const APP_NAME = 'School App';
+const SUPPORT_EMAIL = process.env.EXPO_PUBLIC_SUPPORT_EMAIL || '';
+
+const LEGAL_CONTENT = {
+  privacy: {
+    title: 'Privacy',
+    body: [
+      'School App is a schoolwork planner for creating tasks, subjects, friends, chats, and profile details.',
+      'When you sign in, the app uses your email address to create and secure your account. App content you save may be synced with the cloud database so it can be available across your devices.',
+      'Profile names, usernames, avatars, friend requests, chat rooms, messages, subjects, and tasks are used only to provide the app features shown on this site.',
+      'Do not enter passwords from other services. This sign-in form is only for your School App account.',
+    ],
+  },
+  terms: {
+    title: 'Terms',
+    body: [
+      'Use School App only for your own schoolwork, planning, and communication with people you know.',
+      'You are responsible for the information you add to tasks, profile fields, subjects, friends, and chats.',
+      'Do not use the app to impersonate another person, collect someone else’s credentials, post harmful content, or misuse the service.',
+      'The app is provided as a school planner and may change as features are improved.',
+    ],
+  },
+  contact: {
+    title: 'Contact',
+    body: [
+      SUPPORT_EMAIL
+        ? `For support, questions, or account help, contact ${SUPPORT_EMAIL}.`
+        : 'For support, questions, or account help, contact the owner or administrator who gave you access to this app.',
+      'If you believe this website has been flagged incorrectly, report it to the app owner so they can review the deployment and request a Google Safe Browsing review.',
+    ],
+  },
+};
 
 // Toggle this to re-enable the "check your email" confirmation flow on sign-up.
 // When false, after signUp we immediately try signInWithPassword so new users
@@ -60,6 +93,7 @@ export default function AuthScreen({ onLocalAdminSignIn }) {
   const [error, setError] = useState(null);
   const [info, setInfo] = useState(null);
   const [resendIn, setResendIn] = useState(0);
+  const [legalPage, setLegalPage] = useState(null);
 
   const codeInputRef = useRef(null);
 
@@ -248,9 +282,18 @@ export default function AuthScreen({ onLocalAdminSignIn }) {
         keyboardShouldPersistTaps="handled"
       >
         <View style={[styles.card, shadow.card]}>
-          <Text style={styles.brand}>PLACEHOLDER APP NAME (I severely need ideas)</Text>
+          <Text style={styles.brand}>{APP_NAME}</Text>
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.subtitle}>{subtitle}</Text>
+          {Platform.OS === 'web' ? (
+            <View style={styles.webTrustBox}>
+              <Text style={styles.webTrustTitle}>Independent schoolwork planner</Text>
+              <Text style={styles.webTrustText}>
+                Sign in only to access your School App tasks, subjects, chats, and profile.
+                This site is not asking for any other school, Google, Microsoft, or social media password.
+              </Text>
+            </View>
+          ) : null}
 
           {/* Email field -- always shown except when OTP is on step 'code' */}
           {!(authMethod === 'otp' && otpStep === 'code') && (
@@ -430,9 +473,58 @@ export default function AuthScreen({ onLocalAdminSignIn }) {
               {toggleLabel}
             </Text>
           </Pressable>
+
+          {Platform.OS === 'web' ? (
+            <View style={styles.legalLinks}>
+              {Object.keys(LEGAL_CONTENT).map((key) => (
+                <Pressable
+                  key={key}
+                  onPress={() => setLegalPage(key)}
+                  accessibilityRole="button"
+                  style={styles.legalLinkBtn}
+                >
+                  <Text style={styles.legalLinkText}>{LEGAL_CONTENT[key].title}</Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
         </View>
       </ScrollView>
+
+      {Platform.OS === 'web' ? (
+        <LegalModal
+          page={legalPage}
+          styles={styles}
+          onClose={() => setLegalPage(null)}
+        />
+      ) : null}
     </KeyboardAvoidingView>
+  );
+}
+
+function LegalModal({ page, styles, onClose }) {
+  const content = page ? LEGAL_CONTENT[page] : null;
+  return (
+    <Modal visible={!!content} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={styles.legalBackdrop}>
+        <Pressable style={styles.legalBackdropFill} onPress={onClose} />
+        <View style={styles.legalPanel}>
+          <View style={styles.legalHeader}>
+            <Text style={styles.legalTitle}>{content?.title}</Text>
+            <Pressable onPress={onClose} hitSlop={8}>
+              <Text style={styles.legalClose}>Close</Text>
+            </Pressable>
+          </View>
+          <ScrollView contentContainerStyle={styles.legalBody}>
+            {content?.body.map((paragraph, index) => (
+              <Text key={index} style={styles.legalParagraph}>
+                {paragraph}
+              </Text>
+            ))}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -469,6 +561,25 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
     subtitle: {
       ...typography.bodyMuted,
       marginBottom: spacing.md,
+    },
+    webTrustBox: {
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.cardMuted,
+      padding: spacing.md,
+      gap: spacing.xs,
+      marginBottom: spacing.sm,
+    },
+    webTrustTitle: {
+      color: colors.text,
+      fontSize: 14,
+      fontWeight: '800',
+    },
+    webTrustText: {
+      color: colors.textMuted,
+      fontSize: 13,
+      lineHeight: 18,
     },
     fieldGroup: {
       gap: spacing.xs,
@@ -549,5 +660,71 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       color: colors.textMuted,
       fontSize: 13,
       fontWeight: '600',
+    },
+    legalLinks: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      flexWrap: 'wrap',
+      gap: spacing.sm,
+      paddingTop: spacing.xs,
+    },
+    legalLinkBtn: {
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xs,
+    },
+    legalLinkText: {
+      color: colors.textMuted,
+      fontSize: 12,
+      fontWeight: '700',
+      textDecorationLine: 'underline',
+    },
+    legalBackdrop: {
+      flex: 1,
+      backgroundColor: colors.overlay,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: spacing.lg,
+    },
+    legalBackdropFill: {
+      ...StyleSheet.absoluteFillObject,
+    },
+    legalPanel: {
+      width: '100%',
+      maxWidth: 560,
+      maxHeight: '82%',
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.card,
+      overflow: 'hidden',
+    },
+    legalHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: spacing.md,
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    legalTitle: {
+      color: colors.text,
+      fontSize: 20,
+      fontWeight: '900',
+    },
+    legalClose: {
+      color: colors.primary,
+      fontSize: 14,
+      fontWeight: '800',
+    },
+    legalBody: {
+      padding: spacing.lg,
+      gap: spacing.md,
+    },
+    legalParagraph: {
+      color: colors.text,
+      fontSize: 14,
+      lineHeight: 21,
     },
   });
