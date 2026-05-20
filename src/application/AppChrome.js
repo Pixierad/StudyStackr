@@ -106,9 +106,9 @@ export function DesktopSidebar({
   styles,
   shadow,
 }) {
-  const activeIndex = Math.max(0, SIDEBAR_ITEMS.findIndex((item) => item.key === activePage));
+  const activeIndex = SIDEBAR_ITEMS.findIndex((item) => item.key === activePage);
   const activeYRef = useRef(null);
-  if (activeYRef.current == null) activeYRef.current = new Animated.Value(activeIndex * 56);
+  if (activeYRef.current == null) activeYRef.current = new Animated.Value(Math.max(0, activeIndex) * 56);
   const activeY = activeYRef.current;
   const sidebarWidth = progress.interpolate({
     inputRange: [0, 1],
@@ -134,6 +134,7 @@ export function DesktopSidebar({
   };
 
   useEffect(() => {
+    if (activeIndex < 0) return;
     Animated.timing(activeY, {
       toValue: activeIndex * 56,
       duration: 180,
@@ -168,13 +169,15 @@ export function DesktopSidebar({
       </View>
 
       <View style={styles.desktopSidebarNav}>
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            styles.desktopSidebarActiveIndicator,
-            { transform: [{ translateY: activeY }] },
-          ]}
-        />
+        {activeIndex >= 0 ? (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.desktopSidebarActiveIndicator,
+              { transform: [{ translateY: activeY }] },
+            ]}
+          />
+        ) : null}
         {SIDEBAR_ITEMS.map((item) => (
           <SidebarButton
             key={item.key}

@@ -1,4 +1,12 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "cleanUrls": true
+  "cleanUrls": true,
+  "rewrites": [
+    { "source": "/login", "destination": "/" },
+    { "source": "/settings", "destination": "/" },
+    { "source": "/chats", "destination": "/" },
+    { "source": "/chats/:path*", "destination": "/" },
+    { "source": "/subjects", "destination": "/" },
+    { "source": "/friends", "destination": "/" }
+  ]
 }

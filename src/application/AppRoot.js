@@ -81,6 +81,67 @@ import {
 
 const ENHANCE_MOTION_STORAGE_KEY = '@schoolapp:enhanceMotion:v1';
 
+const DESKTOP_ROUTE_FALLBACK = { page: 'tasks', chatRoomId: null };
+
+function safeDecodePathSegment(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function currentDesktopRoute() {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return DESKTOP_ROUTE_FALLBACK;
+  return desktopRouteFromPath(window.location.pathname);
+}
+
+function desktopRouteFromPath(pathname) {
+  const normalized = `/${String(pathname || '/')
+    .replace(/^\/+/, '')
+    .replace(/\/+$/, '')}` || '/';
+  if (normalized === '/' || normalized === '') return DESKTOP_ROUTE_FALLBACK;
+  if (normalized === '/login') return DESKTOP_ROUTE_FALLBACK;
+  if (normalized === '/settings') return { page: 'settings', chatRoomId: null };
+  if (normalized === '/chats') return { page: 'chats', chatRoomId: null };
+  if (normalized === '/subjects') return { page: 'subjects', chatRoomId: null };
+  if (normalized === '/friends') return { page: 'friends', chatRoomId: null };
+
+  const chatMatch = normalized.match(/^\/chats\/([^/]+)$/);
+  if (chatMatch) {
+    return { page: 'chats', chatRoomId: safeDecodePathSegment(chatMatch[1]) };
+  }
+
+  return DESKTOP_ROUTE_FALLBACK;
+}
+
+function desktopPathFor(page, chatRoomId = null) {
+  if (page === 'login') return '/login';
+  if (page === 'settings') return '/settings';
+  if (page === 'subjects') return '/subjects';
+  if (page === 'friends') return '/friends';
+  if (page === 'chats') {
+    return chatRoomId ? `/chats/${encodeURIComponent(chatRoomId)}` : '/chats';
+  }
+  return '/';
+}
+
+function writeDesktopPath(page, chatRoomId = null, { replace = false } = {}) {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+  const nextPath = desktopPathFor(page, chatRoomId);
+  if (window.location.pathname === nextPath) return;
+  const method = replace ? 'replaceState' : 'pushState';
+  window.history[method]?.(null, '', nextPath);
+}
+
+function isLoginPath() {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return false;
+  const normalized = `/${String(window.location.pathname || '/')
+    .replace(/^\/+/, '')
+    .replace(/\/+$/, '')}`;
+  return normalized === '/login';
+}
+
 export default function App() {
   return (
     <SafeAreaProvider>
@@ -99,6 +160,10 @@ function AppContent() {
     [colors, spacing, radius, typography]
   );
   const isDesktopWeb = Platform.OS === 'web' && width >= 900;
+  const initialDesktopRouteRef = useRef(null);
+  if (initialDesktopRouteRef.current == null) {
+    initialDesktopRouteRef.current = currentDesktopRoute();
+  }
 
   const [tasks, setTasks] = useState([]);
   const [subjects, setSubjects] = useState([]);
@@ -128,9 +193,10 @@ function AppContent() {
   const [notifications, setNotifications] = useState([]);
   const [activeBanner, setActiveBanner] = useState(null);
   const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = useState(false);
-  const [desktopPage, setDesktopPage] = useState('tasks');
-  const [renderedDesktopPage, setRenderedDesktopPage] = useState('tasks');
-  const previousDesktopPageRef = useRef('tasks');
+  const [desktopPage, setDesktopPage] = useState(initialDesktopRouteRef.current.page);
+  const [desktopChatRoomId, setDesktopChatRoomId] = useState(initialDesktopRouteRef.current.chatRoomId);
+  const [renderedDesktopPage, setRenderedDesktopPage] = useState(initialDesktopRouteRef.current.page);
+  const previousDesktopPageRef = useRef(initialDesktopRouteRef.current.page);
   const pendingDesktopPageRef = useRef(null);
   const [desktopTaskSubjectsVisible, setDesktopTaskSubjectsVisible] = useState(false);
   const [enhanceMotion, setEnhanceMotion] = useState(false);
@@ -158,6 +224,22 @@ function AppContent() {
   const notifiedFriendRequestsRef = useRef(new Set());
   const notifiedMessagesRef = useRef(new Set());
 
+  const applyDesktopRoute = useCallback((route) => {
+    setDesktopPage(route.page);
+    setDesktopChatRoomId(route.chatRoomId);
+    setSettingsVisible(false);
+    setChatsVisible(false);
+  }, []);
+
+  const navigateDesktopPage = useCallback(
+    (page, chatRoomId = null, options = {}) => {
+      const route = { page, chatRoomId };
+      applyDesktopRoute(route);
+      writeDesktopPath(page, chatRoomId, options);
+    },
+    [applyDesktopRoute]
+  );
+
   useEffect(() => {
     Animated.timing(desktopSidebarProgress, {
       toValue: desktopSidebarCollapsed ? 0 : 1,
@@ -165,6 +247,32 @@ function AppContent() {
       useNativeDriver: false,
     }).start();
   }, [desktopSidebarCollapsed, desktopSidebarProgress]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return undefined;
+    const handlePopState = () => {
+      if (isDesktopWeb) applyDesktopRoute(currentDesktopRoute());
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [applyDesktopRoute, isDesktopWeb]);
+
+  useEffect(() => {
+    if (!isDesktopWeb) return;
+    applyDesktopRoute(currentDesktopRoute());
+  }, [applyDesktopRoute, isDesktopWeb]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined' || !isSupabaseConfigured) return;
+    if (session === undefined) return;
+    if (!session) {
+      writeDesktopPath('login', null, { replace: true });
+      return;
+    }
+    if (isLoginPath()) {
+      writeDesktopPath('tasks', null, { replace: true });
+    }
+  }, [session]);
 
   useEffect(() => {
     let mounted = true;
@@ -655,10 +763,12 @@ function AppContent() {
     setSettingsVisible(false);
     setFriendsVisible(false);
     setChatsVisible(false);
-      setDesktopPage('tasks');
-      setRenderedDesktopPage('tasks');
-      previousDesktopPageRef.current = 'tasks';
-      pendingDesktopPageRef.current = null;
+    setDesktopPage('tasks');
+    setDesktopChatRoomId(null);
+    setRenderedDesktopPage('tasks');
+    previousDesktopPageRef.current = 'tasks';
+    pendingDesktopPageRef.current = null;
+    writeDesktopPath(isSupabaseConfigured ? 'login' : 'tasks', null, { replace: true });
     setNotificationsVisible(false);
     setNotifications([]);
     setActiveBanner(null);
@@ -682,19 +792,24 @@ function AppContent() {
   }, []);
 
   const openSubjects = useCallback(() => {
-    if (isDesktopWeb) setDesktopPage('subjects');
+    if (isDesktopWeb) navigateDesktopPage('subjects');
     else setSubjectMgrVisible(true);
-  }, [isDesktopWeb]);
+  }, [isDesktopWeb, navigateDesktopPage]);
 
   const openFriends = useCallback(() => {
-    if (isDesktopWeb) setDesktopPage('friends');
+    if (isDesktopWeb) navigateDesktopPage('friends');
     else setFriendsVisible(true);
-  }, [isDesktopWeb]);
+  }, [isDesktopWeb, navigateDesktopPage]);
 
   const openChats = useCallback(() => {
-    if (isDesktopWeb) setDesktopPage('chats');
+    if (isDesktopWeb) navigateDesktopPage('chats');
     else setChatsVisible(true);
-  }, [isDesktopWeb]);
+  }, [isDesktopWeb, navigateDesktopPage]);
+
+  const openSettings = useCallback(() => {
+    if (isDesktopWeb) navigateDesktopPage('settings');
+    else setSettingsVisible(true);
+  }, [isDesktopWeb, navigateDesktopPage]);
 
   // Still determining the initial Supabase session.
   if (session === undefined) {
@@ -736,7 +851,7 @@ function AppContent() {
           profile={profile}
           activePage={desktopPage}
           onToggle={() => setDesktopSidebarCollapsed((value) => !value)}
-          onTasks={() => setDesktopPage('tasks')}
+          onTasks={() => navigateDesktopPage('tasks')}
           onSubjects={openSubjects}
           onFriends={openFriends}
           onChats={openChats}
@@ -777,7 +892,9 @@ function AppContent() {
                     ? 'Subjects'
                     : renderedDesktopPage === 'friends'
                       ? 'Friends'
-                      : 'Chats'}
+                      : renderedDesktopPage === 'settings'
+                        ? 'Settings'
+                        : 'Chats'}
                 </Text>
               </View>
               <View style={styles.headerActions}>
@@ -798,7 +915,7 @@ function AppContent() {
                   ) : null}
                 </Pressable>
                 <Pressable
-                  onPress={() => setSettingsVisible(true)}
+                  onPress={openSettings}
                   style={styles.desktopHeaderBtn}
                   hitSlop={8}
                   accessibilityLabel="Open settings"
@@ -822,7 +939,7 @@ function AppContent() {
                 embedded
                 subjects={subjects}
                 onChange={updateSubjects}
-                onClose={() => setDesktopPage('tasks')}
+                onClose={() => navigateDesktopPage('tasks')}
                 taskCountsBySubject={taskCountsBySubject}
               />
             ) : null}
@@ -830,7 +947,7 @@ function AppContent() {
               <FriendsSheet
                 visible
                 embedded
-                onClose={() => setDesktopPage('tasks')}
+                onClose={() => navigateDesktopPage('tasks')}
                 session={session}
               />
             ) : null}
@@ -838,9 +955,26 @@ function AppContent() {
               <ChatSheet
                 visible
                 embedded
-                onClose={() => setDesktopPage('tasks')}
+                activeRoomId={desktopChatRoomId}
+                onRoomChange={(roomId) => navigateDesktopPage('chats', roomId)}
+                onClose={() => navigateDesktopPage('tasks')}
                 session={session}
                 profile={profile}
+              />
+            ) : null}
+            {renderedDesktopPage === 'settings' ? (
+              <SettingsSheet
+                visible
+                embedded
+                onClose={() => navigateDesktopPage('tasks')}
+                session={session}
+                onSignOut={handleSignOut}
+                enhanceMotion={enhanceMotion}
+                onEnhanceMotionChange={handleEnhanceMotionChange}
+                onShowChangelog={() => {
+                  navigateDesktopPage('tasks');
+                  setTimeout(openChangelog, 250);
+                }}
               />
             ) : null}
           </Animated.View>
@@ -894,7 +1028,7 @@ function AppContent() {
             ) : null}
           </Pressable>
           <Pressable
-            onPress={() => setSettingsVisible(true)}
+            onPress={openSettings}
             style={styles.iconBtn}
             hitSlop={8}
             accessibilityLabel="Open settings"
@@ -1026,7 +1160,7 @@ function AppContent() {
       />
 
       <SettingsSheet
-        visible={settingsVisible}
+        visible={!isDesktopWeb && settingsVisible}
         onClose={() => setSettingsVisible(false)}
         session={session}
         onSignOut={handleSignOut}

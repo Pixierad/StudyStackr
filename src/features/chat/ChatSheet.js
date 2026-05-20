@@ -50,7 +50,15 @@ const COMPOSER_INPUT_MAX_HEIGHT =
 const COMPOSER_INPUT_FONT_SIZE = 15;
 const COMPOSER_INPUT_AVERAGE_CHAR_WIDTH = 7.1;
 
-export default function ChatSheet({ visible, embedded = false, onClose, session = null, profile = null }) {
+export default function ChatSheet({
+  visible,
+  embedded = false,
+  activeRoomId,
+  onRoomChange,
+  onClose,
+  session = null,
+  profile = null,
+}) {
   const { colors, spacing, radius, typography } = useTheme();
   const styles = useMemo(
     () => makeStyles({ colors, spacing, radius, typography }),
@@ -143,6 +151,8 @@ export default function ChatSheet({ visible, embedded = false, onClose, session 
     return unsubscribe;
   }, [activeRoom?.id, mode, refreshMessages, refreshRooms]);
 
+  const roomRoutingControlled = activeRoomId !== undefined;
+
   const startCreate = () => {
     setRoomName('');
     setSelectedFriendIds([]);
@@ -151,12 +161,13 @@ export default function ChatSheet({ visible, embedded = false, onClose, session 
     setMode('create');
   };
 
-  const openRoom = (room) => {
+  const openRoom = useCallback((room) => {
     setActiveRoom(room);
     setMessages([]);
     setDraft('');
     setMessage(null);
     setMode('room');
+    onRoomChange?.(room?.id ?? null);
     loadCachedChatMessages(room.id)
       .then((cachedMessages) => {
         if (cachedMessages.length > 0) {
@@ -165,7 +176,29 @@ export default function ChatSheet({ visible, embedded = false, onClose, session 
         }
       })
       .catch(() => {});
-  };
+  }, [onRoomChange]);
+
+  const backToList = useCallback(() => {
+    setMode('list');
+    setActiveRoom(null);
+    setDetailsRoom(null);
+    setMessages([]);
+    setDraft('');
+    setMessage(null);
+    onRoomChange?.(null);
+  }, [onRoomChange]);
+
+  useEffect(() => {
+    if (!visible || !roomRoutingControlled || !activeRoomId) return;
+    if (activeRoom?.id === activeRoomId) return;
+    const routedRoom = rooms.find((room) => room.id === activeRoomId);
+    if (routedRoom) openRoom(routedRoom);
+  }, [activeRoom?.id, activeRoomId, openRoom, roomRoutingControlled, rooms, visible]);
+
+  useEffect(() => {
+    if (!visible || !roomRoutingControlled || activeRoomId || mode !== 'room') return;
+    backToList();
+  }, [activeRoomId, backToList, mode, roomRoutingControlled, visible]);
 
   const toggleFriend = (id) => {
     setSelectedFriendIds((prev) =>
@@ -311,7 +344,7 @@ export default function ChatSheet({ visible, embedded = false, onClose, session 
           <View style={[styles.windowHeader, mode === 'create' && styles.windowHeaderPlain]}>
             <View style={styles.header}>
               <Pressable
-                onPress={mode === 'list' ? onClose : () => setMode('list')}
+                onPress={mode === 'list' ? onClose : backToList}
                 disabled={embedded && mode === 'list'}
                 hitSlop={8}
                 style={styles.headerSide}

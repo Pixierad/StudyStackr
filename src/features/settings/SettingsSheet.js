@@ -67,6 +67,7 @@ const CUSTOM_COLOR_OPTIONS = [
 // Full-screen settings window: account, theme gallery, and custom theme builder.
 export default function SettingsSheet({
   visible,
+  embedded = false,
   onClose,
   session = null,
   onSignOut,
@@ -133,8 +134,7 @@ export default function SettingsSheet({
 
   const allThemeKeys = [...THEME_PRESET_KEYS, ...customThemes.map((t) => t.key)];
 
-  return (
-    <Modal visible={visible} animationType="slide" onRequestClose={handleCancel} presentationStyle="fullScreen">
+  const content = (
       <View style={styles.settingsScreen}>
         <View style={styles.settingsWindow}>
           <View style={styles.settingsWindowHeader}>
@@ -307,6 +307,16 @@ export default function SettingsSheet({
           ) : null}
         </View>
       </View>
+  );
+
+  if (embedded) {
+    if (!visible) return null;
+    return content;
+  }
+
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={handleCancel} presentationStyle="fullScreen">
+      {content}
     </Modal>
   );
 }
