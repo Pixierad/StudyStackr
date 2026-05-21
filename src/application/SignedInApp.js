@@ -731,6 +731,19 @@ export default function SignedInApp({ session, setSession }) {
     else setSettingsVisible(true);
   }, [isDesktopWeb, navigateDesktopPage]);
 
+  const desktopHeaderTitle =
+    desktopPage === 'subjects'
+      ? 'Subjects'
+      : desktopPage === 'friends'
+        ? 'Friends'
+        : desktopPage === 'settings'
+          ? 'Settings'
+          : desktopPage === 'chats'
+            ? 'Chats'
+            : 'Your tasks';
+  const desktopHeaderKicker =
+    desktopPage === 'tasks' ? greeting(publicName(profile)) : desktopPage;
+
   if (loading) {
     return (
       <SafeAreaView style={styles.root} edges={['top', 'left', 'right']}>
@@ -767,6 +780,58 @@ export default function SignedInApp({ session, setSession }) {
           isDesktopWeb && { marginLeft: desktopMainMarginLeft },
         ]}
       >
+        {isDesktopWeb ? (
+          <View style={[styles.header, styles.desktopHeader]}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.greeting}>{desktopHeaderKicker}</Text>
+              <Text style={styles.headerTitle}>{desktopHeaderTitle}</Text>
+            </View>
+            <View style={styles.headerActions}>
+              <DesktopVersionBadge styles={styles} />
+              <Pressable
+                onPress={openNewTask}
+                style={styles.desktopAddBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Add task"
+              >
+                <Text style={styles.desktopAddText}>+ Add task</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setNotificationsVisible(true)}
+                style={styles.iconBtn}
+                hitSlop={8}
+                accessibilityLabel="Open notifications"
+              >
+                <Text style={styles.iconBtnText}>{'\u{1F514}'}</Text>
+                {notifications.length > 0 ? (
+                  <View style={styles.notificationBadge}>
+                    <Text style={styles.notificationBadgeText}>
+                      {notifications.length > 9 ? '9+' : notifications.length}
+                    </Text>
+                  </View>
+                ) : null}
+              </Pressable>
+              <Pressable
+                onPress={openSettings}
+                style={styles.iconBtn}
+                hitSlop={8}
+                accessibilityLabel="Open settings"
+              >
+                <Text style={styles.iconBtnText}>{'\u2699\uFE0F'}</Text>
+              </Pressable>
+              <Pressable
+                onPress={openChangelog}
+                style={styles.iconBtn}
+                hitSlop={8}
+                accessibilityLabel={hasUnreadChangelog ? "What's new (unread)" : "What's new"}
+              >
+                <Text style={styles.iconBtnText}>{'\u{1F4DC}'}</Text>
+                {hasUnreadChangelog ? <View style={styles.unreadDot} /> : null}
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
+
         {isDesktopWeb && renderedDesktopPage !== 'tasks' ? (
           <Animated.View
             style={[
@@ -784,55 +849,6 @@ export default function SignedInApp({ session, setSession }) {
               },
             ]}
           >
-            <View style={styles.desktopPageHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.greeting}>{renderedDesktopPage}</Text>
-                <Text style={styles.headerTitle}>
-                  {renderedDesktopPage === 'subjects'
-                    ? 'Subjects'
-                    : renderedDesktopPage === 'friends'
-                      ? 'Friends'
-                      : renderedDesktopPage === 'settings'
-                        ? 'Settings'
-                        : 'Chats'}
-                </Text>
-              </View>
-              <View style={styles.headerActions}>
-                <DesktopVersionBadge styles={styles} />
-                <Pressable
-                  onPress={() => setNotificationsVisible(true)}
-                  style={styles.desktopHeaderBtn}
-                  hitSlop={8}
-                  accessibilityLabel="Open notifications"
-                >
-                  <Text style={styles.desktopHeaderIconText}>{'\u{1F514}'}</Text>
-                  {notifications.length > 0 ? (
-                    <View style={styles.notificationBadge}>
-                      <Text style={styles.notificationBadgeText}>
-                        {notifications.length > 9 ? '9+' : notifications.length}
-                      </Text>
-                    </View>
-                  ) : null}
-                </Pressable>
-                <Pressable
-                  onPress={openSettings}
-                  style={styles.desktopHeaderBtn}
-                  hitSlop={8}
-                  accessibilityLabel="Open settings"
-                >
-                  <Text style={styles.desktopHeaderIconText}>{'\u2699\uFE0F'}</Text>
-                </Pressable>
-                <Pressable
-                  onPress={openChangelog}
-                  style={styles.desktopHeaderBtn}
-                  hitSlop={8}
-                  accessibilityLabel={hasUnreadChangelog ? "What's new (unread)" : "What's new"}
-                >
-                  <Text style={styles.desktopHeaderIconText}>{'\u{1F4DC}'}</Text>
-                  {hasUnreadChangelog ? <View style={styles.unreadDot} /> : null}
-                </Pressable>
-              </View>
-            </View>
             <Suspense fallback={<DesktopPageFallback styles={styles} colors={colors} />}>
               {renderedDesktopPage === 'subjects' ? (
                 <SubjectManager
@@ -897,57 +913,48 @@ export default function SignedInApp({ session, setSession }) {
               },
             ]}
           >
-        <View style={[styles.header, isDesktopWeb && styles.desktopHeader]}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.greeting}>{greeting(publicName(profile))}</Text>
-          <Text style={styles.headerTitle}>Your tasks</Text>
-        </View>
-        <View style={styles.headerActions}>
-          {isDesktopWeb ? <DesktopVersionBadge styles={styles} /> : null}
-          {isDesktopWeb ? (
-            <Pressable
-              onPress={openNewTask}
-              style={styles.desktopAddBtn}
-              accessibilityRole="button"
-              accessibilityLabel="Add task"
-            >
-              <Text style={styles.desktopAddText}>+ Add task</Text>
-            </Pressable>
-          ) : null}
-          <Pressable
-            onPress={() => setNotificationsVisible(true)}
-            style={styles.iconBtn}
-            hitSlop={8}
-            accessibilityLabel="Open notifications"
-          >
-            <Text style={styles.iconBtnText}>{'\u{1F514}'}</Text>
-            {notifications.length > 0 ? (
-              <View style={styles.notificationBadge}>
-                <Text style={styles.notificationBadgeText}>
-                  {notifications.length > 9 ? '9+' : notifications.length}
-                </Text>
-              </View>
-            ) : null}
-          </Pressable>
-          <Pressable
-            onPress={openSettings}
-            style={styles.iconBtn}
-            hitSlop={8}
-            accessibilityLabel="Open settings"
-          >
-            <Text style={styles.iconBtnText}>{'\u2699\uFE0F'}</Text>
-          </Pressable>
-          <Pressable
-            onPress={openChangelog}
-            style={styles.iconBtn}
-            hitSlop={8}
-            accessibilityLabel={hasUnreadChangelog ? "What's new (unread)" : "What's new"}
-          >
-            <Text style={styles.iconBtnText}>{'\u{1F4DC}'}</Text>
-            {hasUnreadChangelog ? <View style={styles.unreadDot} /> : null}
-          </Pressable>
-        </View>
-        </View>
+        {!isDesktopWeb ? (
+          <View style={styles.header}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.greeting}>{greeting(publicName(profile))}</Text>
+              <Text style={styles.headerTitle}>Your tasks</Text>
+            </View>
+            <View style={styles.headerActions}>
+              <Pressable
+                onPress={() => setNotificationsVisible(true)}
+                style={styles.iconBtn}
+                hitSlop={8}
+                accessibilityLabel="Open notifications"
+              >
+                <Text style={styles.iconBtnText}>{'\u{1F514}'}</Text>
+                {notifications.length > 0 ? (
+                  <View style={styles.notificationBadge}>
+                    <Text style={styles.notificationBadgeText}>
+                      {notifications.length > 9 ? '9+' : notifications.length}
+                    </Text>
+                  </View>
+                ) : null}
+              </Pressable>
+              <Pressable
+                onPress={openSettings}
+                style={styles.iconBtn}
+                hitSlop={8}
+                accessibilityLabel="Open settings"
+              >
+                <Text style={styles.iconBtnText}>{'\u2699\uFE0F'}</Text>
+              </Pressable>
+              <Pressable
+                onPress={openChangelog}
+                style={styles.iconBtn}
+                hitSlop={8}
+                accessibilityLabel={hasUnreadChangelog ? "What's new (unread)" : "What's new"}
+              >
+                <Text style={styles.iconBtnText}>{'\u{1F4DC}'}</Text>
+                {hasUnreadChangelog ? <View style={styles.unreadDot} /> : null}
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
 
         <ProgressCard progress={progress} styles={styles} />
 
@@ -1225,11 +1232,6 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       flex: 1,
       paddingHorizontal: spacing.xl,
       paddingVertical: spacing.sm,
-      gap: spacing.md,
-    },
-    desktopPageHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
       gap: spacing.md,
     },
     desktopPageFallback: {
@@ -1514,26 +1516,6 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       color: colors.primary,
       fontSize: 12,
       fontWeight: '900',
-    },
-    desktopHeaderBtn: {
-      minHeight: 36,
-      borderRadius: radius.pill,
-      backgroundColor: colors.card,
-      borderWidth: 1,
-      borderColor: colors.border,
-      paddingHorizontal: spacing.md,
-      alignItems: 'center',
-      justifyContent: 'center',
-      position: 'relative',
-    },
-    desktopHeaderBtnText: {
-      color: colors.textMuted,
-      fontSize: 12,
-      fontWeight: '900',
-    },
-    desktopHeaderIconText: {
-      fontSize: 18,
-      lineHeight: 22,
     },
     greeting: {
       ...typography.caption,
