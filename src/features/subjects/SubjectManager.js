@@ -9,6 +9,7 @@ import {
   StyleSheet,
   Platform,
   KeyboardAvoidingView,
+  Keyboard,
   Alert,
   Animated,
   PanResponder,
@@ -365,6 +366,9 @@ function SubjectEditor({ visible, embedded = false, isNew, initial, onCancel, on
   const [room, setRoom] = useState('');
   const [teacher, setTeacher] = useState('');
   const [color, setColor] = useState(null);
+  const nameInputRef = useRef(null);
+  const roomInputRef = useRef(null);
+  const teacherInputRef = useRef(null);
   const screenHeight = Dimensions.get('window').height;
   const translateYRef = useRef(null);
   if (translateYRef.current == null) translateYRef.current = new Animated.Value(screenHeight);
@@ -446,6 +450,18 @@ function SubjectEditor({ visible, embedded = false, isNew, initial, onCancel, on
     }
   };
 
+  const moveToRoom = useCallback(() => {
+    roomInputRef.current?.focus?.();
+  }, []);
+
+  const moveToTeacher = useCallback(() => {
+    teacherInputRef.current?.focus?.();
+  }, []);
+
+  const finishKeyboardEditing = useCallback(() => {
+    Keyboard.dismiss();
+  }, []);
+
   if (embedded) {
     if (!visible) return null;
     return (
@@ -466,6 +482,7 @@ function SubjectEditor({ visible, embedded = false, isNew, initial, onCancel, on
             <View style={styles.field}>
               <Text style={styles.fieldLabel}>Name</Text>
               <TextInput
+                ref={nameInputRef}
                 value={name}
                 onChangeText={setName}
                 placeholder="e.g. Math"
@@ -473,6 +490,8 @@ function SubjectEditor({ visible, embedded = false, isNew, initial, onCancel, on
                 style={styles.input}
                 autoFocus={isNew}
                 returnKeyType="next"
+                blurOnSubmit={false}
+                onSubmitEditing={moveToRoom}
                 maxLength={40}
               />
             </View>
@@ -480,12 +499,15 @@ function SubjectEditor({ visible, embedded = false, isNew, initial, onCancel, on
             <View style={styles.field}>
               <Text style={styles.fieldLabel}>Room number</Text>
               <TextInput
+                ref={roomInputRef}
                 value={room}
                 onChangeText={setRoom}
                 placeholder="e.g. A-204"
                 placeholderTextColor={colors.textFaint}
                 style={styles.input}
                 returnKeyType="next"
+                blurOnSubmit={false}
+                onSubmitEditing={moveToTeacher}
                 maxLength={20}
               />
             </View>
@@ -493,12 +515,14 @@ function SubjectEditor({ visible, embedded = false, isNew, initial, onCancel, on
             <View style={styles.field}>
               <Text style={styles.fieldLabel}>Teacher</Text>
               <TextInput
+                ref={teacherInputRef}
                 value={teacher}
                 onChangeText={setTeacher}
                 placeholder="e.g. Ms. Patel"
                 placeholderTextColor={colors.textFaint}
                 style={styles.input}
                 returnKeyType="done"
+                onSubmitEditing={finishKeyboardEditing}
                 maxLength={40}
               />
             </View>
@@ -577,6 +601,7 @@ function SubjectEditor({ visible, embedded = false, isNew, initial, onCancel, on
             <View style={styles.field}>
               <Text style={styles.fieldLabel}>Name</Text>
               <TextInput
+                ref={nameInputRef}
                 value={name}
                 onChangeText={setName}
                 placeholder="e.g. Math"
@@ -584,6 +609,8 @@ function SubjectEditor({ visible, embedded = false, isNew, initial, onCancel, on
                 style={styles.input}
                 autoFocus={isNew}
                 returnKeyType="next"
+                blurOnSubmit={false}
+                onSubmitEditing={moveToRoom}
                 maxLength={40}
               />
             </View>
@@ -591,12 +618,15 @@ function SubjectEditor({ visible, embedded = false, isNew, initial, onCancel, on
             <View style={styles.field}>
               <Text style={styles.fieldLabel}>Room number</Text>
               <TextInput
+                ref={roomInputRef}
                 value={room}
                 onChangeText={setRoom}
                 placeholder="e.g. A-204"
                 placeholderTextColor={colors.textFaint}
                 style={styles.input}
                 returnKeyType="next"
+                blurOnSubmit={false}
+                onSubmitEditing={moveToTeacher}
                 maxLength={20}
               />
             </View>
@@ -604,12 +634,14 @@ function SubjectEditor({ visible, embedded = false, isNew, initial, onCancel, on
             <View style={styles.field}>
               <Text style={styles.fieldLabel}>Teacher</Text>
               <TextInput
+                ref={teacherInputRef}
                 value={teacher}
                 onChangeText={setTeacher}
                 placeholder="e.g. Ms. Patel"
                 placeholderTextColor={colors.textFaint}
                 style={styles.input}
                 returnKeyType="done"
+                onSubmitEditing={finishKeyboardEditing}
                 maxLength={40}
               />
             </View>
