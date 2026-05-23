@@ -368,16 +368,19 @@ export function buildTheme(themeKey = 'light', customThemes = []) {
     primarySoft: def.primarySoft ?? softFromPrimary(def.primary, isDark),
     primaryText: '#FFFFFF',
   };
-  colors.cardHover = isDark ? mix(colors.card, '#FFFFFF', 0.08) : mix(colors.card, '#000000', 0.035);
+  colors.cardHover = isDark ? mix(colors.card, colors.primary, 0.16) : mix(colors.card, colors.primary, 0.055);
   colors.cardMutedHover = isDark
-    ? mix(colors.cardMuted, '#FFFFFF', 0.08)
-    : mix(colors.cardMuted, '#000000', 0.04);
+    ? mix(colors.cardMuted, colors.primary, 0.18)
+    : mix(colors.cardMuted, colors.primary, 0.07);
+  colors.borderHover = isDark
+    ? mix(colors.borderStrong, colors.primary, 0.45)
+    : mix(colors.borderStrong, colors.primary, 0.35);
   colors.primaryHover = isDark
     ? mix(colors.primary, '#FFFFFF', 0.14)
     : mix(colors.primary, '#000000', 0.1);
   colors.primarySoftHover = isDark
-    ? mix(colors.primarySoft, '#FFFFFF', 0.1)
-    : mix(colors.primarySoft, colors.primary, 0.08);
+    ? mix(colors.primarySoft, colors.primary, 0.18)
+    : mix(colors.primarySoft, colors.primary, 0.1);
   colors.dangerSoftHover = isDark
     ? mix(colors.dangerSoft, '#FFFFFF', 0.1)
     : mix(colors.dangerSoft, colors.danger, 0.08);

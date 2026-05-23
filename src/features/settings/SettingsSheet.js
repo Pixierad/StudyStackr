@@ -344,7 +344,7 @@ function ThemeTile({ preview, selected, onPress, onLongPress, styles }) {
       style={({ pressed, hovered }) => [
         styles.themeTile,
         { borderColor: border, backgroundColor: preview.bg },
-        hovered && styles.themeTileHovered,
+        hovered && { borderColor: preview.primary },
         pressed && styles.themeTilePressed,
       ]}
       accessibilityLabel={preview.label}
@@ -877,9 +877,6 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       borderWidth: 2,
       padding: spacing.md,
       gap: spacing.sm,
-    },
-    themeTileHovered: {
-      borderColor: colors.borderStrong,
     },
     themeTilePressed: {
       opacity: 0.78,

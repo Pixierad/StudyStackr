@@ -1033,7 +1033,7 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
     },
     colorAutoHovered: {
       backgroundColor: colors.cardMutedHover,
-      borderColor: colors.borderStrong,
+      borderColor: colors.borderHover,
     },
     colorAutoText: {
       fontSize: 13,
@@ -1048,7 +1048,7 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       borderColor: colors.border,
     },
     colorSwatchHovered: {
-      borderColor: colors.textMuted,
+      borderColor: colors.borderHover,
     },
     colorPressed: {
       opacity: 0.75,

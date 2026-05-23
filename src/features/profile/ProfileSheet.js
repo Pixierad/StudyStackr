@@ -513,7 +513,7 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
     },
     emojiOptionHovered: {
       backgroundColor: colors.cardHover,
-      borderColor: colors.borderStrong,
+      borderColor: colors.borderHover,
     },
     emojiOptionPressed: {
       opacity: 0.75,

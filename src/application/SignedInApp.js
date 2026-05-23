@@ -1579,7 +1579,7 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
     },
     iconBtnHovered: {
       backgroundColor: colors.cardHover,
-      borderColor: colors.borderStrong,
+      borderColor: colors.borderHover,
     },
     iconBtnPressed: {
       backgroundColor: colors.cardMutedHover,
@@ -1848,7 +1848,7 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
     },
     sortOptionHovered: {
       backgroundColor: colors.cardHover,
-      borderColor: colors.borderStrong,
+      borderColor: colors.borderHover,
     },
     sortOptionActiveHovered: {
       backgroundColor: colors.primarySoftHover,

@@ -1462,7 +1462,7 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
     },
     chatRowHovered: {
       backgroundColor: colors.cardHover,
-      borderColor: colors.borderStrong,
+      borderColor: colors.borderHover,
     },
     chatRowPressed: {
       backgroundColor: colors.cardMutedHover,
@@ -1561,7 +1561,7 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
     },
     durationBtnHovered: {
       backgroundColor: colors.cardHover,
-      borderColor: colors.borderStrong,
+      borderColor: colors.borderHover,
     },
     durationBtnActiveHovered: {
       backgroundColor: colors.primaryHover,
@@ -1593,7 +1593,7 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
     },
     friendPickRowHovered: {
       backgroundColor: colors.cardHover,
-      borderColor: colors.borderStrong,
+      borderColor: colors.borderHover,
     },
     friendPickRowSelectedHovered: {
       backgroundColor: colors.primarySoftHover,

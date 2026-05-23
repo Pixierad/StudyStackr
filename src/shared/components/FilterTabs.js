@@ -89,7 +89,7 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
     },
     tabHovered: {
       backgroundColor: colors.cardHover,
-      borderColor: colors.borderStrong,
+      borderColor: colors.borderHover,
     },
     tabActiveHovered: {
       backgroundColor: colors.primaryHover,

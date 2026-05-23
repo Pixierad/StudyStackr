@@ -744,7 +744,7 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
     },
     chipHovered: {
       backgroundColor: colors.cardHover,
-      borderColor: colors.borderStrong,
+      borderColor: colors.borderHover,
     },
     chipPressed: {
       opacity: 0.75,
