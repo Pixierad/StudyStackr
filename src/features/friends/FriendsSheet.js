@@ -460,14 +460,16 @@ export default function FriendsSheet({ visible, embedded = false, onClose, sessi
           )}
           </View>
         </View>
-        <ProfilePreviewModal
-          person={previewPerson}
-          data={previewData}
-          loading={previewLoading}
-          error={previewError}
-          onClose={() => setPreviewPerson(null)}
-          styles={styles}
-        />
+        {previewPerson ? (
+          <ProfilePreviewModal
+            person={previewPerson}
+            data={previewData}
+            loading={previewLoading}
+            error={previewError}
+            onClose={() => setPreviewPerson(null)}
+            styles={styles}
+          />
+        ) : null}
       </>
     );
   }
@@ -625,14 +627,16 @@ export default function FriendsSheet({ visible, embedded = false, onClose, sessi
           </Animated.View>
         </View>
       </Modal>
-      <ProfilePreviewModal
-        person={previewPerson}
-        data={previewData}
-        loading={previewLoading}
-        error={previewError}
-        onClose={() => setPreviewPerson(null)}
-        styles={styles}
-      />
+      {previewPerson ? (
+        <ProfilePreviewModal
+          person={previewPerson}
+          data={previewData}
+          loading={previewLoading}
+          error={previewError}
+          onClose={() => setPreviewPerson(null)}
+          styles={styles}
+        />
+      ) : null}
     </>
   );
 }
