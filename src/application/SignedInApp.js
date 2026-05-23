@@ -151,7 +151,7 @@ export default function SignedInApp({ session, setSession }) {
   const localAdminSession = isLocalAdminSession(session);
 
   const [filter, setFilter] = useState('all');
-  const [sortMode, setSortMode] = useState('not_done_first');
+  const [sortMode, setSortMode] = useState('due_date');
   const [editingTask, setEditingTask] = useState(null);
   const [formVisible, setFormVisible] = useState(false);
   const [subjectMgrVisible, setSubjectMgrVisible] = useState(false);
