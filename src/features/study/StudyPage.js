@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Alert,
+  AppState,
   FlatList,
   Platform,
   Pressable,
@@ -24,11 +26,53 @@ import {
 import { newId, normalizeStudySession } from './studyRepository';
 
 const POMODORO_SECONDS = 25 * 60;
+const ACTIVE_STUDY_TIMER_KEY_PREFIX = '@simpleapp:activeStudyTimer:';
+const VALID_TIMER_MODES = new Set(['stopwatch', 'pomodoro', 'custom']);
+const VALID_TIMER_STATUSES = new Set(['running', 'paused']);
+
+function activeStudyTimerKey(storageScope) {
+  const rawScope = storageScope == null || storageScope === '' ? 'local' : String(storageScope);
+  const safeScope = rawScope.replace(/[^a-zA-Z0-9_-]/g, '_');
+  return `${ACTIVE_STUDY_TIMER_KEY_PREFIX}${safeScope}:v1`;
+}
+
+function finiteNumber(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function normalizeActiveStudyTimer(value) {
+  if (!value || typeof value !== 'object') return null;
+  const status = VALID_TIMER_STATUSES.has(value.status) ? value.status : null;
+  const mode = VALID_TIMER_MODES.has(value.mode) ? value.mode : 'stopwatch';
+  if (!status) return null;
+
+  const startedAtMs = Math.max(0, finiteNumber(value.startedAtMs, Date.now()));
+  const plannedSeconds =
+    value.plannedSeconds == null ? null : Math.max(1, Math.round(finiteNumber(value.plannedSeconds, 0)));
+  const accumulatedSeconds = Math.max(0, Math.round(finiteNumber(value.accumulatedSeconds, 0)));
+  const startedAtISO =
+    typeof value.startedAtISO === 'string' && !Number.isNaN(Date.parse(value.startedAtISO))
+      ? value.startedAtISO
+      : new Date(startedAtMs || Date.now()).toISOString();
+
+  return {
+    status,
+    mode,
+    title: typeof value.title === 'string' ? value.title.slice(0, 80) : '',
+    subject: typeof value.subject === 'string' && value.subject.trim() ? value.subject.trim() : null,
+    plannedSeconds,
+    accumulatedSeconds,
+    startedAtMs,
+    startedAtISO,
+  };
+}
 
 export default function StudyPage({
   sessions = [],
   subjects = [],
   isDesktopWeb = false,
+  storageScope = 'local',
   onBackToTasks,
   onSaveSession,
   onDeleteSession,
@@ -44,13 +88,87 @@ export default function StudyPage({
   const [sessionTitle, setSessionTitle] = useState('');
   const [customMinutes, setCustomMinutes] = useState('45');
   const [activeTimer, setActiveTimer] = useState(null);
+  const [timerHydrated, setTimerHydrated] = useState(false);
+  const [hydratedTimerKey, setHydratedTimerKey] = useState(null);
   const [nowMs, setNowMs] = useState(Date.now());
+  const activeTimerKey = useMemo(() => activeStudyTimerKey(storageScope), [storageScope]);
 
   useEffect(() => {
     if (activeTimer?.status !== 'running') return undefined;
     const id = setInterval(() => setNowMs(Date.now()), 1000);
     return () => clearInterval(id);
   }, [activeTimer?.status]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setTimerHydrated(false);
+    setHydratedTimerKey(null);
+    AsyncStorage.getItem(activeTimerKey)
+      .then((raw) => {
+        if (cancelled) return;
+        const restored = raw ? normalizeActiveStudyTimer(JSON.parse(raw)) : null;
+        setActiveTimer(restored);
+        setNowMs(Date.now());
+        if (restored) {
+          setMode(restored.mode);
+          setSessionTitle(restored.title || '');
+          setSelectedSubject(restored.subject || '');
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setActiveTimer(null);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setHydratedTimerKey(activeTimerKey);
+          setTimerHydrated(true);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTimerKey]);
+
+  useEffect(() => {
+    if (!timerHydrated || hydratedTimerKey !== activeTimerKey) return undefined;
+    const write = activeTimer
+      ? AsyncStorage.setItem(activeTimerKey, JSON.stringify(activeTimer))
+      : AsyncStorage.removeItem(activeTimerKey);
+    write.catch(() => {});
+    return undefined;
+  }, [activeTimer, activeTimerKey, hydratedTimerKey, timerHydrated]);
+
+  useEffect(() => {
+    const refreshClock = () => setNowMs(Date.now());
+    const appStateSubscription = AppState.addEventListener?.('change', refreshClock);
+
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      window.addEventListener('focus', refreshClock);
+      if (typeof document !== 'undefined') {
+        document.addEventListener('visibilitychange', refreshClock);
+      }
+      return () => {
+        appStateSubscription?.remove?.();
+        window.removeEventListener('focus', refreshClock);
+        if (typeof document !== 'undefined') {
+          document.removeEventListener('visibilitychange', refreshClock);
+        }
+      };
+    }
+
+    return () => appStateSubscription?.remove?.();
+  }, []);
+
+  const persistActiveTimer = useCallback(
+    (timer) => {
+      const write = timer
+        ? AsyncStorage.setItem(activeTimerKey, JSON.stringify(timer))
+        : AsyncStorage.removeItem(activeTimerKey);
+      write.catch(() => {});
+    },
+    [activeTimerKey]
+  );
 
   const elapsedSeconds = useMemo(() => {
     if (!activeTimer) return 0;
@@ -75,7 +193,7 @@ export default function StudyPage({
           ? Math.max(1, Math.round(Number(customMinutes) || 1)) * 60
           : null;
     const now = Date.now();
-    setActiveTimer({
+    const nextTimer = {
       status: 'running',
       mode,
       title: sessionTitle.trim(),
@@ -84,30 +202,36 @@ export default function StudyPage({
       accumulatedSeconds: 0,
       startedAtMs: now,
       startedAtISO: new Date(now).toISOString(),
-    });
+    };
+    setActiveTimer(nextTimer);
+    persistActiveTimer(nextTimer);
     setNowMs(now);
-  }, [customMinutes, mode, selectedSubject, sessionTitle]);
+  }, [customMinutes, mode, persistActiveTimer, selectedSubject, sessionTitle]);
 
   const pauseTimer = useCallback(() => {
     if (!activeTimer || activeTimer.status !== 'running') return;
-    setActiveTimer({
+    const nextTimer = {
       ...activeTimer,
       status: 'paused',
       accumulatedSeconds: elapsedSeconds,
       startedAtMs: Date.now(),
-    });
-  }, [activeTimer, elapsedSeconds]);
+    };
+    setActiveTimer(nextTimer);
+    persistActiveTimer(nextTimer);
+  }, [activeTimer, elapsedSeconds, persistActiveTimer]);
 
   const resumeTimer = useCallback(() => {
     if (!activeTimer || activeTimer.status !== 'paused') return;
     const now = Date.now();
-    setActiveTimer({
+    const nextTimer = {
       ...activeTimer,
       status: 'running',
       startedAtMs: now,
-    });
+    };
+    setActiveTimer(nextTimer);
+    persistActiveTimer(nextTimer);
     setNowMs(now);
-  }, [activeTimer]);
+  }, [activeTimer, persistActiveTimer]);
 
   const stopTimer = useCallback(() => {
     if (!activeTimer) return;
@@ -126,12 +250,16 @@ export default function StudyPage({
     });
     onSaveSession?.(session);
     setActiveTimer(null);
+    persistActiveTimer(null);
     setSessionTitle('');
-  }, [activeTimer, elapsedSeconds, onSaveSession]);
+  }, [activeTimer, elapsedSeconds, onSaveSession, persistActiveTimer]);
 
   const discardTimer = useCallback(() => {
     if (!activeTimer) return;
-    const clear = () => setActiveTimer(null);
+    const clear = () => {
+      setActiveTimer(null);
+      persistActiveTimer(null);
+    };
     if (elapsedSeconds < 60) {
       clear();
       return;
@@ -144,7 +272,7 @@ export default function StudyPage({
       { text: 'Keep timer', style: 'cancel' },
       { text: 'Discard', style: 'destructive', onPress: clear },
     ]);
-  }, [activeTimer, elapsedSeconds]);
+  }, [activeTimer, elapsedSeconds, persistActiveTimer]);
 
   const deleteSession = useCallback(
     (session) => {

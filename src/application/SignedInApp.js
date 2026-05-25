@@ -968,6 +968,7 @@ export default function SignedInApp({ session, setSession }) {
                   sessions={studySessions}
                   subjects={subjects}
                   isDesktopWeb
+                  storageScope={sessionUserId}
                   onSaveSession={handleSaveStudySession}
                   onDeleteSession={handleDeleteStudySession}
                 />
@@ -1040,6 +1041,7 @@ export default function SignedInApp({ session, setSession }) {
             <StudyPage
               sessions={studySessions}
               subjects={subjects}
+              storageScope={sessionUserId}
               onBackToTasks={() => setMobilePage('tasks')}
               onSaveSession={handleSaveStudySession}
               onDeleteSession={handleDeleteStudySession}
