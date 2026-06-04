@@ -6,6 +6,7 @@
   "rewrites": [
     { "source": "/login", "destination": "/" },
     { "source": "/settings", "destination": "/" },
+    { "source": "/study", "destination": "/" },
     { "source": "/chats", "destination": "/" },
     { "source": "/chats/:path*", "destination": "/" },
     { "source": "/subjects", "destination": "/" },

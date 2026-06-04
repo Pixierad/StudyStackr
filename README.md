@@ -15,7 +15,7 @@ A clean Expo app for tracking schoolwork across web and mobile. Create tasks, ta
 - **Offline fallback**: local AsyncStorage cache lets the app load recent data if Supabase is temporarily unavailable.
 - **Offline saves**: edits made while disconnected are queued locally and replayed when the app can reach Supabase again.
 - **Themes**: preset themes plus custom light/dark themes.
-- **Web deploys**: Expo web export deployed to Vercel.
+- **Web deploys**: Expo web export deployed from the static `dist/` folder.
 
 ## Project Structure
 
@@ -25,9 +25,10 @@ SchoolApp/
 |-- App.web.js                     Website entry point -> apps/website
 |-- app.json                       Expo app config
 |-- package.json                   Web/mobile scripts and dependencies
-|-- deploy.ps1                     Signed commit, web export, and Vercel deploy helper
+|-- deploy.ps1                     Commit, push, web export, and Cloudflare Pages handoff helper
 |-- supabase-setup.sql             Supabase tables, RLS policies, indexes, profile trigger
 |-- vercel.json                    Vercel static hosting config
+|-- public/                        Static trust pages plus Cloudflare Pages routing/header files
 |-- apps/
 |   |-- mobile/                    Expo / React Native app shell
 |   `-- website/                   Desktop web shell and route ownership
@@ -89,15 +90,77 @@ Supabase stores user-owned rows:
 
 The client also keeps an AsyncStorage cache per user so the UI can load quickly and fall back if Supabase is unavailable. When a network write fails because the device is offline, the write is stored in a per-user pending queue and replayed on the next successful data load.
 
-## Deploying To Vercel
+## Deploying To Cloudflare Pages
 
-The deploy helper signs and pushes a commit, exports the Expo web bundle, and deploys `dist/` to Vercel:
+Cloudflare Pages can build and host the static Expo web export directly from this repo.
+
+Use these Pages build settings:
+
+```text
+Framework preset: None
+Build command: npm run build:web
+Build output directory: dist
+Root directory: /
+```
+
+Add these environment variables in Cloudflare Pages under **Settings > Environment variables**:
+
+```text
+EXPO_PUBLIC_SUPABASE_URL
+EXPO_PUBLIC_SUPABASE_ANON_KEY
+```
+
+The `public/_redirects` file rewrites app routes such as `/login`, `/study`, `/friends`, `/subjects`, and `/chats/:id` to `index.html` so direct visits and refreshes work on Cloudflare Pages. The `public/_headers` file adds basic security headers and long-lived caching for generated Expo static assets.
+
+After adding a production custom domain in Cloudflare, update Supabase auth settings:
+
+- **Site URL**: `https://your-domain.example`
+- **Redirect URLs**:
+  - `https://your-domain.example`
+  - `https://your-domain.example/login`
+  - any Cloudflare preview URL you intentionally use for auth testing
+
+Before switching traffic fully, verify:
+
+```powershell
+npm run check:web
+```
+
+Then test these deployed paths:
+
+- `/`
+- `/login`
+- `/study`
+- `/friends`
+- `/subjects`
+- `/chats`
+- `/privacy`
+- `/terms`
+- `/contact`
+
+Once Cloudflare and Supabase auth are working on the custom domain, stop sharing generated Vercel or Cloudflare preview URLs and use only the custom domain for production.
+
+The deploy helper now stages changes, commits, pushes to GitHub, builds the web bundle, and hands off to Cloudflare Pages:
 
 ```powershell
 npm run deploy -- "Deploy: message here"
 ```
 
-For first-time setup, link the Vercel project locally and make sure commit signing is configured if your Vercel project rejects unverified commits.
+Use this mode when the Cloudflare Pages project is connected to GitHub. Cloudflare will deploy after the push.
+
+For a direct `dist/` upload with Wrangler, set:
+
+```powershell
+$env:CLOUDFLARE_PAGES_DIRECT='1'
+$env:CLOUDFLARE_PAGES_PROJECT='schoolapp'
+npm run deploy -- "Deploy: message here"
+```
+
+## Deploying To Vercel
+
+Vercel is now treated as a legacy host for this project. The checked-in `vercel.json` is kept so existing Vercel deployments and deep links continue to work while traffic moves to Cloudflare.
+
+Use Cloudflare Pages for new production deployments.
 
 ## Mobile App Roadmap
 

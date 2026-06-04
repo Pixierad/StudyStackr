@@ -6,19 +6,133 @@
     <title>Terms - Study Stackr</title>
     <meta name="description" content="Terms for using Study Stackr, an independent schoolwork planner.">
     <style>
-      body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: 760px; margin: 0 auto; padding: 40px 20px; line-height: 1.6; color: #1a1d29; background: #f5f6fa; }
-      main { background: #fff; border: 1px solid #e5e7eb; border-radius: 16px; padding: 28px; }
-      a { color: #d92f2a; font-weight: 700; }
+      :root {
+        color-scheme: light;
+        --bg: #f6f7fb;
+        --card: #ffffff;
+        --text: #1a1d29;
+        --muted: #5f6678;
+        --border: #dde2ec;
+        --accent: #d92f2a;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        line-height: 1.6;
+      }
+
+      main {
+        width: min(880px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 48px 0;
+      }
+
+      article {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: clamp(24px, 5vw, 44px);
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: clamp(32px, 6vw, 48px);
+        line-height: 1.1;
+      }
+
+      h2 {
+        margin: 32px 0 8px;
+        font-size: 20px;
+      }
+
+      p, li {
+        color: var(--muted);
+        font-size: 16px;
+      }
+
+      ul {
+        padding-left: 22px;
+      }
+
+      a {
+        color: var(--accent);
+        font-weight: 700;
+      }
+
+      .eyebrow {
+        color: var(--accent);
+        font-size: 13px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        margin: 0 0 12px;
+        text-transform: uppercase;
+      }
+
+      .notice {
+        background: #fff4f3;
+        border: 1px solid #ffd4d1;
+        border-radius: 10px;
+        color: #8d1f1a;
+        padding: 14px 16px;
+      }
+
+      .footer {
+        border-top: 1px solid var(--border);
+        margin-top: 36px;
+        padding-top: 20px;
+      }
     </style>
   </head>
   <body>
     <main>
-      <h1>Terms</h1>
-      <p>Use Study Stackr only for your own schoolwork, planning, and communication with people you know.</p>
-      <p>You are responsible for the information you add to tasks, profile fields, subjects, friends, and chats.</p>
-      <p>Do not use the app to impersonate another person, collect someone else&apos;s credentials, post harmful content, or misuse the service.</p>
-      <p>The app is provided as a task planner and tracker and may change as features are improved.</p>
-      <p><a href="/">Back to Study Stackr</a></p>
+      <article>
+        <p class="eyebrow">Study Stackr</p>
+        <h1>Terms</h1>
+        <p>Last updated: 4 June 2026</p>
+        <p>These terms explain the basic rules for using Study Stackr, an independent schoolwork planner.</p>
+
+        <p class="notice">Study Stackr is only for Study Stackr accounts. Do not enter Google, Microsoft, school, banking, or other third-party passwords into this website.</p>
+
+        <h2>Using The App</h2>
+        <p>You may use Study Stackr to manage your own schoolwork, subjects, study sessions, timers, friends, chats, and profile. You are responsible for the information you add to the app.</p>
+
+        <h2>Account Safety</h2>
+        <p>Keep your account details private. Do not share your password with anyone else, and do not use a password from another service.</p>
+
+        <h2>Acceptable Use</h2>
+        <p>Do not use Study Stackr to:</p>
+        <ul>
+          <li>Impersonate another person or pretend to represent a school, company, or service.</li>
+          <li>Collect, request, or share someone else's credentials.</li>
+          <li>Harass, threaten, spam, or abuse other users.</li>
+          <li>Upload or send harmful, illegal, misleading, or malicious content.</li>
+          <li>Try to disrupt, reverse engineer, or misuse the service.</li>
+        </ul>
+
+        <h2>Content You Add</h2>
+        <p>You keep responsibility for tasks, profile details, messages, study session names, and other content you create. Only add information you are comfortable storing in the app.</p>
+
+        <h2>Friends And Messaging</h2>
+        <p>Only connect with people you know. Messages and profile information may be visible to other users depending on the feature and your relationship with them inside the app.</p>
+
+        <h2>Changes And Availability</h2>
+        <p>Study Stackr is actively developed. Features may change, be improved, or be removed. The service may occasionally be unavailable because of maintenance, hosting issues, or provider outages.</p>
+
+        <h2>No Professional Advice</h2>
+        <p>Study Stackr is a planner and study tracker. It does not provide legal, medical, financial, academic, or professional advice.</p>
+
+        <h2>Contact</h2>
+        <p>For questions about these terms, contact <a href="mailto:mrdogguy@outlook.com">mrdogguy@outlook.com</a>.</p>
+
+        <p class="footer"><a href="/">Back to Study Stackr</a> | <a href="/privacy">Privacy</a> | <a href="/contact">Contact</a></p>
+      </article>
     </main>
   </body>
 </html>

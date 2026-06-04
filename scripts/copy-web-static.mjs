@@ -18,6 +18,7 @@ const staticVercelConfig = {
   rewrites: [
     { source: '/login', destination: '/' },
     { source: '/settings', destination: '/' },
+    { source: '/study', destination: '/' },
     { source: '/chats', destination: '/' },
     { source: '/chats/:path*', destination: '/' },
     { source: '/subjects', destination: '/' },
@@ -40,7 +41,7 @@ if (existsSync(indexPath)) {
   if (!html.includes('name="description"')) {
     html = html.replace(
       '<title>School App</title>',
-      `<title>School App</title>\n    <meta name="description" content="${description}" />\n    <link rel="help" href="/contact.html" />\n    <link rel="terms-of-service" href="/terms.html" />`
+      `<title>School App</title>\n    <meta name="description" content="${description}" />\n    <link rel="help" href="/contact" />\n    <link rel="terms-of-service" href="/terms" />`
     );
   }
 
@@ -49,7 +50,7 @@ if (existsSync(indexPath)) {
     `<noscript>
       <h1>School App</h1>
       <p>School App is an independent schoolwork planner. JavaScript is required to sign in and use the app.</p>
-      <p><a href="/privacy.html">Privacy</a> <a href="/terms.html">Terms</a> <a href="/contact.html">Contact</a></p>
+      <p><a href="/privacy">Privacy</a> <a href="/terms">Terms</a> <a href="/contact">Contact</a></p>
     </noscript>`
   );
 

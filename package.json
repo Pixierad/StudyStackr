@@ -19,13 +19,13 @@
     "check:website": "expo export --platform web --clear && node ./scripts/copy-web-static.mjs",
     "check:web": "expo export --platform web --clear && node ./scripts/copy-web-static.mjs",
     "dev": "cross-env REACT_NATIVE_PACKAGER_HOSTNAME=${EXPO_PACKAGER_HOSTNAME:-127.0.0.1} expo start",
-    "deploy": "powershell -ExecutionPolicy Bypass -File ./deploy.ps1"
+    "deploy": "powershell -ExecutionPolicy Bypass -File ./deploy.ps1",
+    "deploy:cloudflare": "powershell -ExecutionPolicy Bypass -File ./deploy.ps1"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/datetimepicker": "8.4.4",
     "@supabase/supabase-js": "^2.45.4",
-    "@vercel/analytics": "^2.0.1",
     "expo": "~54.0.0",
     "expo-asset": "~12.0.0",
     "expo-image-picker": "~17.0.11",
