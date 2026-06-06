@@ -1,5 +1,5 @@
 import React, { Suspense, useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Platform, StyleSheet } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -14,6 +14,8 @@ import {
 
 const AuthScreen = React.lazy(() => import('../../src/features/auth/AuthScreen'));
 const SignedInApp = React.lazy(() => import('../../src/application/SignedInApp'));
+
+const allowLocalWebsiteMode = process.env.EXPO_PUBLIC_ALLOW_WEB_LOCAL_MODE === 'true';
 
 function writeWebPath(path, { replace = true } = {}) {
   if (Platform.OS !== 'web' || typeof window === 'undefined') return;
@@ -43,6 +45,7 @@ export default function WebsiteApp() {
 function WebsiteAuthGate() {
   const { colors, isDark } = useTheme();
   const styles = makeStyles(colors);
+  const authConfigurationMissing = !isSupabaseConfigured && !allowLocalWebsiteMode;
   const [session, setSession] = useState(isSupabaseConfigured ? undefined : null);
 
   useEffect(() => {
@@ -80,13 +83,17 @@ function WebsiteAuthGate() {
   }, []);
 
   useEffect(() => {
+    if (authConfigurationMissing) {
+      writeWebPath('/login');
+      return;
+    }
     if (!isSupabaseConfigured || session === undefined) return;
     if (!session) {
       writeWebPath('/login');
       return;
     }
     if (isLoginPath()) writeWebPath('/');
-  }, [session]);
+  }, [authConfigurationMissing, session]);
 
   const handleLocalAdminSignIn = useCallback(async () => {
     if (!isLocalAdminAccessAllowed()) return;
@@ -94,6 +101,15 @@ function WebsiteAuthGate() {
     if (supabase) await supabase.auth.signOut().catch(() => {});
     setSession(createLocalAdminSession());
   }, []);
+
+  if (authConfigurationMissing) {
+    return (
+      <SafeAreaView style={styles.root} edges={['top', 'left', 'right']}>
+        <StatusBar style={isDark ? 'light' : 'dark'} />
+        <AuthConfigurationMissing styles={styles} />
+      </SafeAreaView>
+    );
+  }
 
   if (session === undefined) {
     return (
@@ -142,6 +158,26 @@ function AppFallback() {
   );
 }
 
+function AuthConfigurationMissing({ styles }) {
+  return (
+    <View style={styles.configWrap}>
+      <View style={styles.configCard}>
+        <Text style={styles.configTitle}>Login is not configured</Text>
+        <Text style={styles.configText}>
+          This web build is missing the Supabase public environment variables, so it cannot show the sign-in form.
+        </Text>
+        <View style={styles.configCodeBox}>
+          <Text style={styles.configCode}>EXPO_PUBLIC_SUPABASE_URL</Text>
+          <Text style={styles.configCode}>EXPO_PUBLIC_SUPABASE_ANON_KEY</Text>
+        </View>
+        <Text style={styles.configText}>
+          Add both variables in Cloudflare Pages, then redeploy the site.
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 const makeStyles = (colors) =>
   StyleSheet.create({
     root: {
@@ -153,5 +189,46 @@ const makeStyles = (colors) =>
       backgroundColor: colors.bg,
       alignItems: 'center',
       justifyContent: 'center',
+    },
+    configWrap: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 24,
+      backgroundColor: colors.bg,
+    },
+    configCard: {
+      width: '100%',
+      maxWidth: 460,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.card,
+      padding: 24,
+      gap: 14,
+    },
+    configTitle: {
+      color: colors.text,
+      fontSize: 24,
+      fontWeight: '900',
+    },
+    configText: {
+      color: colors.textMuted,
+      fontSize: 15,
+      lineHeight: 22,
+    },
+    configCodeBox: {
+      borderRadius: 8,
+      backgroundColor: colors.cardMuted,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: 14,
+      gap: 8,
+    },
+    configCode: {
+      color: colors.text,
+      fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
+      fontSize: 13,
+      fontWeight: '700',
     },
   });
