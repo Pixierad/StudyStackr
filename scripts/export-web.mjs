@@ -20,9 +20,6 @@ function gitShortSha() {
 }
 
 function buildVersion() {
-  const explicit = process.env.EXPO_PUBLIC_APP_VERSION;
-  if (explicit) return explicit;
-
   const deploySha =
     process.env.CF_PAGES_COMMIT_SHA ||
     process.env.VERCEL_GIT_COMMIT_SHA ||
@@ -31,6 +28,13 @@ function buildVersion() {
   if (deploySha) return deploySha.slice(0, 7);
 
   return gitShortSha() || 'local';
+}
+
+function buildMetadata() {
+  return {
+    EXPO_PUBLIC_APP_VERSION: buildVersion(),
+    EXPO_PUBLIC_APP_BUILT: timestamp(),
+  };
 }
 
 function timestamp() {
@@ -51,7 +55,7 @@ function dotenvLine(key, value) {
   return `${key}=${JSON.stringify(normalized)}`;
 }
 
-function publicExpoEnv() {
+function publicExpoEnv(metadata) {
   const values = {};
   for (const [key, value] of Object.entries(process.env)) {
     if (key.startsWith('EXPO_PUBLIC_') && value != null) {
@@ -59,8 +63,7 @@ function publicExpoEnv() {
     }
   }
 
-  values.EXPO_PUBLIC_APP_VERSION = buildVersion();
-  values.EXPO_PUBLIC_APP_BUILT = values.EXPO_PUBLIC_APP_BUILT || timestamp();
+  Object.assign(values, metadata);
 
   return Object.keys(values)
     .sort()
@@ -68,11 +71,11 @@ function publicExpoEnv() {
     .join('\n') + '\n';
 }
 
-function run(command, args) {
+function run(command, args, env = process.env) {
   return new Promise((resolveRun, rejectRun) => {
     const child = spawn(command, args, {
       cwd: root,
-      env: process.env,
+      env,
       stdio: 'inherit',
       shell: false,
     });
@@ -91,7 +94,9 @@ function run(command, args) {
 const previousEnv = existsSync(envPath) ? await readFile(envPath, 'utf8') : null;
 
 try {
-  const envFile = publicExpoEnv();
+  const metadata = buildMetadata();
+  const envFile = publicExpoEnv(metadata);
+  const buildEnv = { ...process.env, ...metadata };
   await writeFile(envPath, envFile);
 
   const version = envFile.match(/^EXPO_PUBLIC_APP_VERSION=(.*)$/m)?.[1] || '';
@@ -104,8 +109,8 @@ try {
     '--platform',
     'web',
     ...process.argv.slice(2),
-  ]);
-  await run(process.execPath, [resolve(root, 'scripts', 'copy-web-static.mjs')]);
+  ], buildEnv);
+  await run(process.execPath, [resolve(root, 'scripts', 'copy-web-static.mjs')], buildEnv);
 } finally {
   if (previousEnv == null) {
     if (existsSync(envPath)) await unlink(envPath);
