@@ -49,6 +49,105 @@ const COMPOSER_INPUT_MAX_HEIGHT =
   COMPOSER_INPUT_LINE_HEIGHT * COMPOSER_INPUT_MAX_LINES + COMPOSER_INPUT_VERTICAL_PADDING;
 const COMPOSER_INPUT_FONT_SIZE = 15;
 const COMPOSER_INPUT_AVERAGE_CHAR_WIDTH = 7.1;
+const PENDING_MATCH_WINDOW_MS = 60_000;
+
+function localMessageId() {
+  return `local-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function messageTimestamp(message, fallback = 0) {
+  const time = new Date(message?.createdAt || '').getTime();
+  return Number.isNaN(time) ? fallback : time;
+}
+
+function createLocalMessage({ roomId, userId, profile, body }) {
+  const id = localMessageId();
+  return {
+    id,
+    localId: id,
+    roomId,
+    senderId: userId,
+    body,
+    createdAt: new Date().toISOString(),
+    type: 'message',
+    isSystem: false,
+    isLocal: true,
+    localStatus: 'sending',
+    sender: {
+      ...(profile || {}),
+      id: userId,
+    },
+  };
+}
+
+function stripLocalMessages(messages = []) {
+  return messages.filter((message) => !message?.isLocal);
+}
+
+function pendingMatchesRemote(pending, remote) {
+  if (!pending || !remote || remote.isSystem) return false;
+  if (pending.senderId !== remote.senderId || pending.body !== remote.body) return false;
+  const pendingTime = messageTimestamp(pending, Date.now());
+  const remoteTime = messageTimestamp(remote, pendingTime);
+  return Math.abs(remoteTime - pendingTime) <= PENDING_MATCH_WINDOW_MS;
+}
+
+function reconcilePendingMessages(pendingMessages = [], roomId, remoteMessages = []) {
+  const remoteIds = new Set(remoteMessages.map((message) => message.id).filter(Boolean));
+  const matchedRemoteIds = new Set();
+
+  return pendingMessages.filter((pending) => {
+    if (pending.roomId !== roomId) return true;
+    if (pending.serverId && remoteIds.has(pending.serverId)) {
+      matchedRemoteIds.add(pending.serverId);
+      return false;
+    }
+
+    const match = remoteMessages.find((remote) => {
+      if (remote.id && matchedRemoteIds.has(remote.id)) return false;
+      return pendingMatchesRemote(pending, remote);
+    });
+
+    if (match) {
+      if (match.id) matchedRemoteIds.add(match.id);
+      return false;
+    }
+
+    return true;
+  });
+}
+
+function mergeChatMessages(remoteMessages = [], pendingMessages = [], roomId) {
+  const localMessages = pendingMessages.filter((message) => message.roomId === roomId);
+  return [...stripLocalMessages(remoteMessages), ...localMessages].sort(
+    (a, b) => messageTimestamp(a) - messageTimestamp(b)
+  );
+}
+
+function sentMessageId(value) {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) return sentMessageId(value[0]);
+  if (value && typeof value === 'object' && typeof value.id === 'string') return value.id;
+  return null;
+}
+
+function applyPendingRoomPreviews(rooms, pendingMessages = []) {
+  if (!Array.isArray(rooms) || pendingMessages.length === 0) return rooms;
+  return rooms.map((room) => {
+    const latestPending = pendingMessages
+      .filter((message) => message.roomId === room.id && message.localStatus !== 'failed')
+      .sort((a, b) => messageTimestamp(b) - messageTimestamp(a))[0];
+    if (!latestPending) return room;
+    const roomLastAt = messageTimestamp({ createdAt: room.lastMessageAt });
+    if (roomLastAt > messageTimestamp(latestPending)) return room;
+    return {
+      ...room,
+      lastMessageBody: latestPending.body,
+      lastMessageAt: latestPending.createdAt,
+      unreadCount: 0,
+    };
+  });
+}
 
 export default function ChatSheet({
   visible,
@@ -83,6 +182,18 @@ export default function ChatSheet({
   const canUseChats = !!session;
   const userId = session?.user?.id ?? null;
   const messageScrollRef = useRef(null);
+  const activeRoomIdRef = useRef(null);
+  const pendingMessagesRef = useRef([]);
+
+  useEffect(() => {
+    activeRoomIdRef.current = activeRoom?.id ?? null;
+  }, [activeRoom?.id]);
+
+  const syncVisibleMessages = useCallback((roomId, animated = true) => {
+    if (!roomId || activeRoomIdRef.current !== roomId) return;
+    setMessages((current) => mergeChatMessages(current, pendingMessagesRef.current, roomId));
+    setTimeout(() => messageScrollRef.current?.scrollToEnd?.({ animated }), 50);
+  }, []);
 
   const refreshRooms = useCallback(async () => {
     if (!canUseChats) {
@@ -90,16 +201,25 @@ export default function ChatSheet({
       return [];
     }
     const items = await loadChatRooms();
-    setRooms(items);
-    return items;
+    const nextItems = applyPendingRoomPreviews(items, pendingMessagesRef.current);
+    setRooms(nextItems);
+    return nextItems;
   }, [canUseChats]);
 
   const refreshMessages = useCallback(async (roomId) => {
     if (!roomId) return;
     const items = await loadChatMessages(roomId);
-    setMessages(items);
-    markChatRead(roomId).catch(() => {});
-    setTimeout(() => messageScrollRef.current?.scrollToEnd?.({ animated: true }), 50);
+    pendingMessagesRef.current = reconcilePendingMessages(
+      pendingMessagesRef.current,
+      roomId,
+      items
+    );
+    if (activeRoomIdRef.current === roomId) {
+      setMessages(mergeChatMessages(items, pendingMessagesRef.current, roomId));
+      markChatRead(roomId).catch(() => {});
+      setTimeout(() => messageScrollRef.current?.scrollToEnd?.({ animated: true }), 50);
+    }
+    return items;
   }, []);
 
   useEffect(() => {
@@ -118,7 +238,7 @@ export default function ChatSheet({
       .then(([cachedRooms, cachedFriends]) => {
         if (cancelled) return;
         if (cachedRooms.length > 0) {
-          setRooms(cachedRooms);
+          setRooms(applyPendingRoomPreviews(cachedRooms, pendingMessagesRef.current));
           setLoading(false);
         }
         if (cachedFriends.length > 0) setFriends(cachedFriends);
@@ -127,7 +247,7 @@ export default function ChatSheet({
     Promise.all([loadChatRooms(), loadFriends()])
       .then(([roomItems, friendItems]) => {
         if (cancelled) return;
-        setRooms(roomItems);
+        setRooms(applyPendingRoomPreviews(roomItems, pendingMessagesRef.current));
         setFriends(friendItems);
       })
       .catch((e) => {
@@ -162,16 +282,19 @@ export default function ChatSheet({
   };
 
   const openRoom = useCallback((room) => {
+    const roomId = room?.id ?? null;
+    activeRoomIdRef.current = roomId;
     setActiveRoom(room);
-    setMessages([]);
+    setMessages(roomId ? mergeChatMessages([], pendingMessagesRef.current, roomId) : []);
     setDraft('');
     setMessage(null);
     setMode('room');
-    onRoomChange?.(room?.id ?? null);
-    loadCachedChatMessages(room.id)
+    onRoomChange?.(roomId);
+    if (!roomId) return;
+    loadCachedChatMessages(roomId)
       .then((cachedMessages) => {
-        if (cachedMessages.length > 0) {
-          setMessages(cachedMessages);
+        if (cachedMessages.length > 0 && activeRoomIdRef.current === roomId) {
+          setMessages(mergeChatMessages(cachedMessages, pendingMessagesRef.current, roomId));
           setTimeout(() => messageScrollRef.current?.scrollToEnd?.({ animated: false }), 50);
         }
       })
@@ -179,6 +302,7 @@ export default function ChatSheet({
   }, [onRoomChange]);
 
   const backToList = useCallback(() => {
+    activeRoomIdRef.current = null;
     setMode('list');
     setActiveRoom(null);
     setDetailsRoom(null);
@@ -227,21 +351,56 @@ export default function ChatSheet({
     }
   };
 
-  const handleSend = async () => {
+  const handleSend = () => {
     const body = draft.trim();
-    if (!body || !activeRoom?.id || busy) return;
-    setBusy(true);
+    const roomId = activeRoom?.id;
+    if (!body || !roomId || !userId) return;
+
+    const localMessage = createLocalMessage({ roomId, userId, profile, body });
+    pendingMessagesRef.current = [...pendingMessagesRef.current, localMessage];
     setDraft('');
-    try {
-      await sendChatMessage(activeRoom.id, body);
-      await refreshMessages(activeRoom.id);
-      await refreshRooms();
-    } catch (e) {
-      setDraft(body);
-      setMessage(e?.message || 'Could not send message.');
-    } finally {
-      setBusy(false);
-    }
+    setMessage(null);
+    setMessages((current) => mergeChatMessages(current, pendingMessagesRef.current, roomId));
+    setRooms((current) => applyPendingRoomPreviews(current, pendingMessagesRef.current));
+    setActiveRoom((current) =>
+      current?.id === roomId
+        ? {
+            ...current,
+            lastMessageBody: body,
+            lastMessageAt: localMessage.createdAt,
+            unreadCount: 0,
+          }
+        : current
+    );
+    setTimeout(() => messageScrollRef.current?.scrollToEnd?.({ animated: true }), 50);
+
+    sendChatMessage(roomId, body)
+      .then(async (messageId) => {
+        const serverId = sentMessageId(messageId);
+        pendingMessagesRef.current = pendingMessagesRef.current.map((pending) =>
+          pending.localId === localMessage.localId
+            ? {
+                ...pending,
+                id: serverId || pending.id,
+                serverId: serverId || pending.serverId,
+                localStatus: 'sent',
+              }
+            : pending
+        );
+        syncVisibleMessages(roomId, false);
+        await refreshMessages(roomId);
+        await refreshRooms();
+      })
+      .catch((e) => {
+        pendingMessagesRef.current = pendingMessagesRef.current.map((pending) =>
+          pending.localId === localMessage.localId
+            ? { ...pending, localStatus: 'failed' }
+            : pending
+        );
+        syncVisibleMessages(roomId, false);
+        setMessage(e?.message || 'Could not send message.');
+        refreshRooms().catch(() => {});
+      });
   };
 
   const handlePin = async (room) => {
@@ -406,7 +565,6 @@ export default function ChatSheet({
               profile={profile}
               draft={draft}
               setDraft={setDraft}
-              busy={busy}
               message={message}
               onSend={handleSend}
               scrollRef={messageScrollRef}
@@ -621,7 +779,6 @@ function RoomView({
   profile,
   draft,
   setDraft,
-  busy,
   message,
   onSend,
   scrollRef,
@@ -698,10 +855,11 @@ function RoomView({
     if (nativeEvent.key !== 'Enter' || nativeEvent.shiftKey) return;
     event.preventDefault?.();
     nativeEvent.preventDefault?.();
-    if (!draft.trim() || busy) return;
+    if (!draft.trim()) return;
     onSend?.();
   };
   const composerBottomLift = Platform.OS === 'web' ? spacing.md : spacing.xl;
+  const canSend = !!draft.trim();
 
   return (
     <KeyboardAvoidingView
@@ -741,11 +899,38 @@ function RoomView({
                   <View style={styles.messageAvatarSpacer} />
                 )
               ) : null}
-              <View style={[styles.bubble, mentioned && styles.bubbleMentioned, mine && styles.bubbleMine]}>
+              <View
+                style={[
+                  styles.bubble,
+                  mentioned && styles.bubbleMentioned,
+                  mine && styles.bubbleMine,
+                  item.localStatus === 'sending' && styles.bubbleSending,
+                  item.localStatus === 'failed' && styles.bubbleFailed,
+                ]}
+              >
                 {!mine && startsSenderRun ? (
                   <Text style={[styles.senderName, mentioned && styles.senderNameMentioned]} numberOfLines={1}>{publicName(item.sender)}</Text>
                 ) : null}
-                <Text style={[styles.messageText, mine && styles.messageTextMine]}>{item.body}</Text>
+                <Text
+                  style={[
+                    styles.messageText,
+                    mine && styles.messageTextMine,
+                    item.localStatus === 'failed' && styles.messageTextFailed,
+                  ]}
+                >
+                  {item.body}
+                </Text>
+                {item.localStatus === 'sending' || item.localStatus === 'failed' ? (
+                  <Text
+                    style={[
+                      styles.messageStatus,
+                      mine && styles.messageStatusMine,
+                      item.localStatus === 'failed' && styles.messageStatusFailed,
+                    ]}
+                  >
+                    {item.localStatus === 'failed' ? 'Not sent' : 'Sending...'}
+                  </Text>
+                ) : null}
               </View>
             </View>
           );
@@ -816,12 +1001,12 @@ function RoomView({
         </View>
         <Pressable
           onPress={onSend}
-          disabled={!draft.trim() || busy}
+          disabled={!canSend}
           style={({ pressed, hovered }) => [
             styles.sendBtn,
-            hovered && draft.trim() && !busy && styles.sendBtnHovered,
-            pressed && draft.trim() && !busy && styles.sendBtnPressed,
-            (!draft.trim() || busy) && styles.disabled,
+            hovered && canSend && styles.sendBtnHovered,
+            pressed && canSend && styles.sendBtnPressed,
+            !canSend && styles.disabled,
           ]}
         >
           <Text style={styles.sendText}>Send</Text>
@@ -1731,6 +1916,13 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       borderBottomLeftRadius: radius.lg,
       borderBottomRightRadius: radius.sm,
     },
+    bubbleSending: {
+      opacity: 0.82,
+    },
+    bubbleFailed: {
+      backgroundColor: colors.dangerSoft,
+      borderColor: colors.danger,
+    },
     senderName: {
       color: colors.textMuted,
       fontSize: 11,
@@ -1747,6 +1939,22 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
     },
     messageTextMine: {
       color: '#fff',
+    },
+    messageTextFailed: {
+      color: colors.danger,
+    },
+    messageStatus: {
+      color: colors.textFaint,
+      fontSize: 11,
+      fontWeight: '700',
+      lineHeight: 14,
+      marginTop: 4,
+    },
+    messageStatusMine: {
+      color: 'rgba(255, 255, 255, 0.78)',
+    },
+    messageStatusFailed: {
+      color: colors.danger,
     },
     composer: {
       flexDirection: 'row',
