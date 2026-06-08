@@ -331,7 +331,11 @@ export default function FriendsSheet({ visible, embedded = false, onClose, sessi
             </View>
           </View>
 
-          <View style={styles.content}>
+          <ScrollView
+            style={styles.embeddedContentScroll}
+            contentContainerStyle={styles.content}
+            keyboardShouldPersistTaps="handled"
+          >
           {!canUseFriends ? (
             <View style={styles.notice}>
               <Text style={styles.noticeTitle}>Friend search needs an account</Text>
@@ -458,7 +462,7 @@ export default function FriendsSheet({ visible, embedded = false, onClose, sessi
               </View>
             </>
           )}
-          </View>
+          </ScrollView>
         </View>
         {previewPerson ? (
           <ProfilePreviewModal
@@ -496,7 +500,7 @@ export default function FriendsSheet({ visible, embedded = false, onClose, sessi
             </View>
           </View>
 
-          <View style={styles.content}>
+          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
             {!canUseFriends ? (
               <View style={styles.notice}>
                 <Text style={styles.noticeTitle}>Friend search needs an account</Text>
@@ -623,7 +627,7 @@ export default function FriendsSheet({ visible, embedded = false, onClose, sessi
                 </View>
               </>
             )}
-          </View>
+          </ScrollView>
           </Animated.View>
         </View>
       </Modal>
@@ -879,6 +883,9 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       borderBottomColor: colors.border,
       paddingVertical: spacing.xs,
     },
+    embeddedContentScroll: {
+      flex: 1,
+    },
     dragZone: {
       paddingBottom: spacing.sm,
     },
@@ -919,7 +926,6 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       paddingHorizontal: spacing.lg,
       paddingBottom: spacing.xl,
       gap: spacing.lg,
-      flexShrink: 1,
     },
     section: {
       gap: spacing.sm,
