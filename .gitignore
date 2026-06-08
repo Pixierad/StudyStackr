@@ -44,5 +44,4 @@ sanity_test.txt
 
 app-example
 
-.vercel
 .env*.local

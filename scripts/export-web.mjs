@@ -22,7 +22,6 @@ function gitShortSha() {
 function buildVersion() {
   const deploySha =
     process.env.CF_PAGES_COMMIT_SHA ||
-    process.env.VERCEL_GIT_COMMIT_SHA ||
     process.env.COMMIT_SHA ||
     '';
   if (deploySha) return deploySha.slice(0, 7);

@@ -1,11 +1,10 @@
 # scripts/setup-commit-signing.ps1
 # ---------------------------------------------------------------------------
 # Configure this Windows machine so every git commit is automatically signed
-# with your existing SSH key, and (optionally) re-sign the current HEAD so
-# Vercel stops rejecting deployments with:
+# with your existing SSH key, and (optionally) re-sign the current HEAD when
+# a deployment or repository rule requires verified commits.
 #
-#     The Deployment was canceled because it was created with an unverified
-#     commit
+# Some hosts and protected branches reject unsigned or unverified commits.
 #
 # What this script does, in order:
 #
@@ -25,7 +24,7 @@
 #      manually (this part cannot be automated -- it requires authenticating
 #      to github.com in a browser).
 #   6. If your current HEAD is unsigned, offers to amend it with -S and
-#      force-push so the rejected Vercel deployment can be retried.
+#      force-push so the rejected deployment can be retried.
 #
 # Run from the project root:
 #     powershell -ExecutionPolicy Bypass -File .\scripts\setup-commit-signing.ps1
@@ -197,7 +196,7 @@ $verifyExit = $LASTEXITCODE
 if ($verifyExit -eq 0) {
     Write-Ok "HEAD ($headSha) is already verified. Nothing to fix."
 } else {
-    Write-Warn "HEAD ($headSha) is not signed; this is what Vercel rejected."
+    Write-Warn "HEAD ($headSha) is not signed; this can be rejected by protected deploys."
     Write-Host ''
     Write-Host '    Two options:'                                                          -ForegroundColor White
     Write-Host '      [a] Amend HEAD in place and force-push   (fastest, rewrites history)' -ForegroundColor White
@@ -221,7 +220,7 @@ if ($verifyExit -eq 0) {
 
         cmd /c "git verify-commit HEAD >nul 2>nul"
         if ($LASTEXITCODE -eq 0) {
-            Write-Ok 'HEAD is now signed and pushed. Re-run your Vercel deployment.'
+            Write-Ok 'HEAD is now signed and pushed. Re-run your deployment.'
         } else {
             Write-Warn 'Local verification still failed. Check that:'
             Write-Warn '   - the SSH key was added on GitHub as a *Signing* key (not Auth)'
@@ -237,5 +236,4 @@ if ($verifyExit -eq 0) {
 
 Write-Host ''
 Write-Host 'Setup complete. Future commits will be signed automatically.'              -ForegroundColor Green
-Write-Host 'The deploy script now verifies HEAD is signed before pushing,'             -ForegroundColor Green
-Write-Host 'so an unsigned commit will be caught locally instead of by Vercel.'        -ForegroundColor Green
+Write-Host 'Unsigned commits will now be caught locally before a protected deploy.'    -ForegroundColor Green

@@ -102,7 +102,7 @@ export const CHANGELOG = [
     date: '2026-04-25',
     title: 'Hotfix: deployment rejection fixed',
     notes: [
-      'Fixed an issue where Vercel would reject the latest deployment due to no SSH key for the repo (my bad).',
+      'Fixed an issue where the latest deployment was rejected due to no SSH key for the repo (my bad).',
       'New: legit nothing lol.'
     ],
   },

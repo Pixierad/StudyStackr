@@ -27,7 +27,6 @@ SchoolApp/
 |-- package.json                   Web/mobile scripts and dependencies
 |-- deploy.ps1                     Commit, push, web export, and Cloudflare Pages handoff helper
 |-- supabase-setup.sql             Supabase tables, RLS policies, indexes, profile trigger
-|-- vercel.json                    Vercel static hosting config
 |-- public/                        Static trust pages plus Cloudflare Pages routing/header files
 |-- apps/
 |   |-- mobile/                    Expo / React Native app shell
@@ -142,7 +141,7 @@ Then test these deployed paths:
 - `/terms`
 - `/contact`
 
-Once Cloudflare and Supabase auth are working on the custom domain, stop sharing generated Vercel or Cloudflare preview URLs and use only the custom domain for production.
+Once Cloudflare and Supabase auth are working on the custom domain, stop sharing generated preview URLs and use only the custom domain for production.
 
 The deploy helper now stages changes, commits, pushes to GitHub, builds the web bundle, and hands off to Cloudflare Pages:
 
@@ -159,12 +158,6 @@ $env:CLOUDFLARE_PAGES_DIRECT='1'
 $env:CLOUDFLARE_PAGES_PROJECT='schoolapp'
 npm run deploy -- "Deploy: message here"
 ```
-
-## Deploying To Vercel
-
-Vercel is now treated as a legacy host for this project. The checked-in `vercel.json` is kept so existing Vercel deployments and deep links continue to work while traffic moves to Cloudflare.
-
-Use Cloudflare Pages for new production deployments.
 
 ## Mobile App Roadmap
 
