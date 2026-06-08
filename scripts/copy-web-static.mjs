@@ -7,6 +7,13 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const source = resolve(root, 'public');
 const target = resolve(root, 'dist');
 
+async function webBuildVersion() {
+  const envPath = resolve(root, '.env.production.local');
+  if (!existsSync(envPath)) return '';
+  const envFile = await readFile(envPath, 'utf8');
+  return envFile.match(/^EXPO_PUBLIC_APP_VERSION=(.*)$/m)?.[1]?.replace(/^"|"$/g, '') || '';
+}
+
 if (existsSync(source)) {
   await mkdir(target, { recursive: true });
   await cp(source, target, { recursive: true });
@@ -35,6 +42,7 @@ await writeFile(
 const indexPath = resolve(target, 'index.html');
 if (existsSync(indexPath)) {
   let html = await readFile(indexPath, 'utf8');
+  const version = await webBuildVersion();
   const description =
     'School App is an independent schoolwork planner for tasks, subjects, chats, friends, and profile settings.';
 
@@ -53,6 +61,14 @@ if (existsSync(indexPath)) {
       <p><a href="/privacy">Privacy</a> <a href="/terms">Terms</a> <a href="/contact">Contact</a></p>
     </noscript>`
   );
+
+  if (version) {
+    const cacheBust = encodeURIComponent(version);
+    html = html.replace(
+      /src="(\/_expo\/static\/js\/[^"?]+\.js)(?:\?v=[^"]*)?"/g,
+      `src="$1?v=${cacheBust}"`
+    );
+  }
 
   await writeFile(indexPath, html);
 }
