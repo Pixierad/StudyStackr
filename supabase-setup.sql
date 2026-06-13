@@ -16,6 +16,7 @@ create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   name text not null default '',
   created_at timestamptz not null default now(),
+  last_online_at timestamptz,
   updated_at timestamptz not null default now()
 );
 
@@ -231,6 +232,9 @@ alter table public.profiles
   add column if not exists avatar_type text not null default 'emoji',
   add column if not exists avatar_value text not null default '🎓';
 
+alter table public.profiles
+  add column if not exists last_online_at timestamptz;
+
 update public.profiles p
 set created_at = u.created_at
 from auth.users u
@@ -278,6 +282,7 @@ returns table (
   username text,
   avatar_type text,
   avatar_value text,
+  last_online_at timestamptz,
   is_friend boolean,
   incoming_request boolean,
   outgoing_request boolean
@@ -292,6 +297,7 @@ as $$
     p.username,
     p.avatar_type,
     p.avatar_value,
+    p.last_online_at,
     exists (
       select 1
       from public.friends f
@@ -331,13 +337,16 @@ as $$
   limit 20;
 $$;
 
-create or replace function public.list_friends()
+drop function if exists public.list_friends();
+
+create function public.list_friends()
 returns table (
   id uuid,
   name text,
   username text,
   avatar_type text,
   avatar_value text,
+  last_online_at timestamptz,
   friended_at timestamptz
 )
 language sql
@@ -350,6 +359,7 @@ as $$
     p.username,
     p.avatar_type,
     p.avatar_value,
+    p.last_online_at,
     f.created_at as friended_at
   from public.friends f
   join public.profiles p on p.id = f.friend_id
@@ -1195,6 +1205,7 @@ returns table (
   username text,
   avatar_type text,
   avatar_value text,
+  last_online_at timestamptz,
   is_friend boolean,
   incoming_request boolean,
   outgoing_request boolean
@@ -1216,6 +1227,7 @@ returns table (
   username text,
   avatar_type text,
   avatar_value text,
+  last_online_at timestamptz,
   friended_at timestamptz
 )
 language sql

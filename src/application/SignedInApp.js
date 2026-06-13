@@ -7,6 +7,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Animated,
+  AppState,
   Platform,
   useWindowDimensions,
 } from 'react-native';
@@ -45,7 +46,7 @@ import {
   subscribeToChatNotifications,
 } from '../features/chat/chatRepository';
 import { supabase, isSupabaseConfigured } from '../services/supabase';
-import { loadAppData } from '../services/storage';
+import { loadAppData, touchProfileOnline } from '../services/storage';
 import { CHANGELOG, latestChangelogVersion } from '../features/changelog/changelog';
 import { normalizeProfile, publicName } from '../shared/profile';
 
@@ -73,6 +74,7 @@ import {
 } from '../features/auth/localAdminCredentials';
 
 const ENHANCE_MOTION_STORAGE_KEY = '@schoolapp:enhanceMotion:v1';
+const ONLINE_HEARTBEAT_MS = 60 * 1000;
 
 function notificationSourceKey(notification = {}) {
   if (notification.sourceKey) return notification.sourceKey;
@@ -394,6 +396,37 @@ export default function SignedInApp({ session, setSession }) {
       cancelled = true;
     };
   }, [session, sessionUserId]);
+
+  useEffect(() => {
+    if (!sessionUserId) return undefined;
+
+    const markOnline = () => {
+      touchProfileOnline().catch(() => {});
+    };
+
+    markOnline();
+    const intervalId = setInterval(markOnline, ONLINE_HEARTBEAT_MS);
+    const appStateSubscription = AppState.addEventListener?.('change', (state) => {
+      if (state === 'active') markOnline();
+    });
+
+    let removeVisibilityListener = null;
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      const handleVisibilityChange = () => {
+        if (!document.hidden) markOnline();
+      };
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      removeVisibilityListener = () => {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      };
+    }
+
+    return () => {
+      clearInterval(intervalId);
+      appStateSubscription?.remove?.();
+      removeVisibilityListener?.();
+    };
+  }, [sessionUserId]);
 
   const activeChatRoomId = isDesktopWeb
     ? desktopPage === 'chats' ? desktopChatRoomId : null

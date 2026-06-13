@@ -27,7 +27,12 @@ import {
   removeFriend,
   searchProfiles,
 } from './friendsRepository';
-import { profileStackingLabel, publicName } from '../../shared/profile';
+import {
+  isProfileOnline,
+  profileOnlineLabel,
+  profileStackingLabel,
+  publicName,
+} from '../../shared/profile';
 import ProfileAvatar from '../profile/ProfileAvatar';
 import StudyHeatmap, { StudySummaryStrip } from '../study/StudyHeatmap';
 
@@ -46,6 +51,7 @@ export default function FriendsSheet({ visible, embedded = false, onClose, sessi
   const [searching, setSearching] = useState(false);
   const [message, setMessage] = useState(null);
   const [busyId, setBusyId] = useState(null);
+  const [statusNow, setStatusNow] = useState(() => Date.now());
   const [previewPerson, setPreviewPerson] = useState(null);
   const [previewData, setPreviewData] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -64,6 +70,13 @@ export default function FriendsSheet({ visible, embedded = false, onClose, sessi
       mountedRef.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!visible || !canUseFriends) return undefined;
+    setStatusNow(Date.now());
+    const intervalId = setInterval(() => setStatusNow(Date.now()), 60 * 1000);
+    return () => clearInterval(intervalId);
+  }, [visible, canUseFriends]);
 
   const closeWithAnimation = useCallback(() => {
     Animated.timing(translateY, {
@@ -455,6 +468,8 @@ export default function FriendsSheet({ visible, embedded = false, onClose, sessi
                       danger
                       onPress={() => handleRemove(person)}
                       onOpenProfile={() => setPreviewPerson(person)}
+                      showStatus
+                      statusNow={statusNow}
                       styles={styles}
                     />
                   ))}
@@ -620,6 +635,8 @@ export default function FriendsSheet({ visible, embedded = false, onClose, sessi
                         danger
                         onPress={() => handleRemove(person)}
                         onOpenProfile={() => setPreviewPerson(person)}
+                        showStatus
+                        statusNow={statusNow}
                         styles={styles}
                       />
                     ))}
@@ -801,9 +818,22 @@ function FriendRequestRow({ person, busy, onAccept, onDecline, onOpenProfile, st
   );
 }
 
-function FriendRow({ person, busy, actionLabel, disabled, danger, onPress, onOpenProfile, styles }) {
+function FriendRow({
+  person,
+  busy,
+  actionLabel,
+  disabled,
+  danger,
+  onPress,
+  onOpenProfile,
+  showStatus = false,
+  statusNow = Date.now(),
+  styles,
+}) {
   const name = publicName(person);
   const username = person.username ? `@${person.username}` : 'No username';
+  const online = isProfileOnline(person, statusNow);
+  const statusLabel = profileOnlineLabel(person, statusNow);
 
   return (
     <Pressable
@@ -816,10 +846,23 @@ function FriendRow({ person, busy, actionLabel, disabled, danger, onPress, onOpe
         pressed && styles.friendRowPressed,
       ]}
     >
-      <ProfileAvatar profile={person} size={42} />
+      <ProfileAvatar
+        profile={person}
+        size={42}
+        showOnlineIndicator={showStatus}
+        isOnline={online}
+      />
       <View style={styles.friendText}>
         <Text style={styles.friendName} numberOfLines={1}>{name}</Text>
         <Text style={styles.friendUsername} numberOfLines={1}>{username}</Text>
+        {showStatus ? (
+          <Text
+            style={[styles.friendStatus, online && styles.friendStatusOnline]}
+            numberOfLines={1}
+          >
+            {statusLabel}
+          </Text>
+        ) : null}
       </View>
       <Pressable
         onPress={(event) => {
@@ -1022,6 +1065,15 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       color: colors.textMuted,
       fontSize: 13,
       marginTop: 2,
+    },
+    friendStatus: {
+      color: colors.textFaint,
+      fontSize: 12,
+      fontWeight: '700',
+      marginTop: 2,
+    },
+    friendStatusOnline: {
+      color: colors.success,
     },
     friendAction: {
       minWidth: 74,

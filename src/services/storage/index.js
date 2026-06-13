@@ -81,7 +81,11 @@ function runQueued(fn) {
 
 let _flushChain = Promise.resolve();
 const REMOTE_CACHE_TTL_MS = 30_000;
+const ONLINE_TOUCH_MIN_INTERVAL_MS = 45_000;
 const remoteMemoryCache = new Map();
+let lastProfileOnlineTouchAt = 0;
+let lastProfileOnlineTouchUserId = null;
+let profileOnlineTouchDisabled = false;
 
 function readFreshRemoteCache(key) {
   const cached = remoteMemoryCache.get(key);
@@ -239,6 +243,7 @@ function rowToProfile(r, fallbackId = null) {
     avatarType: r?.avatar_type ?? r?.avatarType ?? 'emoji',
     avatarValue: r?.avatar_value ?? r?.avatarValue ?? DEFAULT_AVATAR_EMOJI,
     createdAt: r?.created_at ?? r?.createdAt ?? null,
+    lastOnlineAt: r?.last_online_at ?? r?.lastOnlineAt ?? null,
   });
 }
 
@@ -842,11 +847,20 @@ async function loadCloudProfile(uid) {
     // up before the trigger was deployed have no row. maybeSingle() lets
     // us return '' in that case rather than surfacing an error -- the
     // first saveUserName() call will then create the row via upsert.
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('profiles')
-      .select('id, name, username, avatar_type, avatar_value, created_at')
+      .select('id, name, username, avatar_type, avatar_value, created_at, last_online_at')
       .eq('id', uid)
       .maybeSingle();
+    if (error && String(error.message || '').includes('last_online_at')) {
+      const fallback = await supabase
+        .from('profiles')
+        .select('id, name, username, avatar_type, avatar_value, created_at')
+        .eq('id', uid)
+        .maybeSingle();
+      data = fallback.data;
+      error = fallback.error;
+    }
     if (error) throw error;
     const profile = rowToProfile(data, uid);
     AsyncStorage.setItem(userNameKey(uid), profile.name).catch(() => {});
@@ -937,6 +951,39 @@ export async function saveProfile(profile) {
     await writeLocalObject(profileKey(null), cleaned);
   } catch (e) {
     console.warn('Failed to save profile:', e);
+  }
+}
+
+export async function touchProfileOnline() {
+  const uid = await cloudMode();
+  if (!uid || profileOnlineTouchDisabled) return;
+
+  if (uid !== lastProfileOnlineTouchUserId) {
+    lastProfileOnlineTouchUserId = uid;
+    lastProfileOnlineTouchAt = 0;
+  }
+
+  const nowMs = Date.now();
+  if (nowMs - lastProfileOnlineTouchAt < ONLINE_TOUCH_MIN_INTERVAL_MS) return;
+  lastProfileOnlineTouchAt = nowMs;
+
+  const lastOnlineAt = new Date(nowMs).toISOString();
+  try {
+    const { error } = await supabase
+      .from('profiles')
+      .upsert({ id: uid, last_online_at: lastOnlineAt }, { onConflict: 'id' });
+    if (error) throw error;
+
+    const cached = await readLocalObject(profileKey(uid));
+    if (cached) {
+      writeLocalObject(profileKey(uid), { ...cached, lastOnlineAt }).catch(() => {});
+    }
+  } catch (e) {
+    const message = String(e?.message || '');
+    if (message.includes('last_online_at')) {
+      profileOnlineTouchDisabled = true;
+    }
+    console.warn('Supabase update online status failed:', message || e);
   }
 }
 
