@@ -680,91 +680,98 @@ function CreateView({
 }) {
   const canCreate = selectedFriendIds.length > 0 && !busy;
   return (
-    <View style={styles.createContent}>
-      <View style={styles.section}>
-        <Text style={styles.sectionLabel}>Name</Text>
-        <TextInput
-          value={roomName}
-          onChangeText={setRoomName}
-          placeholder="Optional chat name"
-          placeholderTextColor={colors.textFaint}
-          style={styles.input}
-          maxLength={80}
-        />
-      </View>
+    <View style={styles.createWrap}>
+      <ScrollView
+        style={styles.createScroll}
+        contentContainerStyle={styles.createContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Name</Text>
+          <TextInput
+            value={roomName}
+            onChangeText={setRoomName}
+            placeholder="Optional chat name"
+            placeholderTextColor={colors.textFaint}
+            style={styles.input}
+            maxLength={80}
+          />
+        </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionLabel}>Lasts for</Text>
-        <View style={styles.durationGrid}>
-          {DURATION_OPTIONS.map((option) => {
-            const active = lifetimeHours === option.hours;
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Lasts for</Text>
+          <View style={styles.durationGrid}>
+            {DURATION_OPTIONS.map((option) => {
+              const active = lifetimeHours === option.hours;
+              return (
+                <Pressable
+                  key={option.hours}
+                  onPress={() => setLifetimeHours(option.hours)}
+                  style={({ pressed, hovered }) => [
+                    styles.durationBtn,
+                    active && styles.durationBtnActive,
+                    hovered && (active ? styles.durationBtnActiveHovered : styles.durationBtnHovered),
+                    pressed && styles.durationBtnPressed,
+                  ]}
+                >
+                  <Text style={[styles.durationText, active && styles.durationTextActive]}>
+                    {option.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Friends</Text>
+          {friends.length === 0 ? (
+            <Text style={styles.emptyText}>Add friends first, then create a chat.</Text>
+          ) : null}
+          {friends.map((friend) => {
+            const selected = selectedFriendIds.includes(friend.id);
             return (
               <Pressable
-                key={option.hours}
-                onPress={() => setLifetimeHours(option.hours)}
+                key={friend.id}
+                onPress={() => toggleFriend(friend.id)}
                 style={({ pressed, hovered }) => [
-                  styles.durationBtn,
-                  active && styles.durationBtnActive,
-                  hovered && (active ? styles.durationBtnActiveHovered : styles.durationBtnHovered),
-                  pressed && styles.durationBtnPressed,
+                  styles.friendPickRow,
+                  selected && styles.friendPickRowSelected,
+                  hovered && (selected ? styles.friendPickRowSelectedHovered : styles.friendPickRowHovered),
+                  pressed && styles.friendPickRowPressed,
                 ]}
               >
-                <Text style={[styles.durationText, active && styles.durationTextActive]}>
-                  {option.label}
-                </Text>
+                <ProfileAvatar profile={friend} size={38} />
+                <View style={styles.friendText}>
+                  <Text style={styles.friendName} numberOfLines={1}>{publicName(friend)}</Text>
+                  <Text style={styles.friendUsername} numberOfLines={1}>
+                    {friend.username ? `@${friend.username}` : 'Friend'}
+                  </Text>
+                </View>
+                <View style={[styles.checkCircle, selected && styles.checkCircleSelected]}>
+                  {selected ? <Text style={styles.checkText}>{'\u2713'}</Text> : null}
+                </View>
               </Pressable>
             );
           })}
         </View>
+      </ScrollView>
+
+      <View style={styles.createFooter}>
+        {message ? <MessageBox styles={styles} text={message} /> : null}
+        <Pressable
+          onPress={onCreate}
+          disabled={!canCreate}
+          style={({ pressed, hovered }) => [
+            styles.primaryBtn,
+            hovered && canCreate && styles.primaryBtnHovered,
+            pressed && canCreate && styles.primaryBtnPressed,
+            !canCreate && styles.disabled,
+          ]}
+        >
+          {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Create chat</Text>}
+        </Pressable>
       </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionLabel}>Friends</Text>
-        {friends.length === 0 ? (
-          <Text style={styles.emptyText}>Add friends first, then create a chat.</Text>
-        ) : null}
-        {friends.map((friend) => {
-          const selected = selectedFriendIds.includes(friend.id);
-          return (
-            <Pressable
-              key={friend.id}
-              onPress={() => toggleFriend(friend.id)}
-              style={({ pressed, hovered }) => [
-                styles.friendPickRow,
-                selected && styles.friendPickRowSelected,
-                hovered && (selected ? styles.friendPickRowSelectedHovered : styles.friendPickRowHovered),
-                pressed && styles.friendPickRowPressed,
-              ]}
-            >
-              <ProfileAvatar profile={friend} size={38} />
-              <View style={styles.friendText}>
-                <Text style={styles.friendName} numberOfLines={1}>{publicName(friend)}</Text>
-                <Text style={styles.friendUsername} numberOfLines={1}>
-                  {friend.username ? `@${friend.username}` : 'Friend'}
-                </Text>
-              </View>
-              <View style={[styles.checkCircle, selected && styles.checkCircleSelected]}>
-                {selected ? <Text style={styles.checkText}>{'\u2713'}</Text> : null}
-              </View>
-            </Pressable>
-          );
-        })}
-      </View>
-
-      {message ? <MessageBox styles={styles} text={message} /> : null}
-
-      <Pressable
-        onPress={onCreate}
-        disabled={!canCreate}
-        style={({ pressed, hovered }) => [
-          styles.primaryBtn,
-          hovered && canCreate && styles.primaryBtnHovered,
-          pressed && canCreate && styles.primaryBtnPressed,
-          !canCreate && styles.disabled,
-        ]}
-      >
-        {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Create chat</Text>}
-      </Pressable>
     </View>
   );
 }
@@ -1555,8 +1562,26 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
     createContent: {
       paddingHorizontal: spacing.lg,
       paddingTop: spacing.lg,
-      paddingBottom: spacing.xl,
+      paddingBottom: spacing.lg,
       gap: spacing.md,
+    },
+    createWrap: {
+      flex: 1,
+      minHeight: 0,
+    },
+    createScroll: {
+      flex: 1,
+      minHeight: 0,
+    },
+    createFooter: {
+      flexShrink: 0,
+      gap: spacing.md,
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.md,
+      paddingBottom: spacing.lg,
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+      backgroundColor: colors.bg,
     },
     listWrap: {
       flex: 1,
