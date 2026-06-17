@@ -7,7 +7,7 @@ import { Platform } from 'react-native';
 export const LOCAL_ADMIN_USERNAME = 'test';
 export const LOCAL_ADMIN_PASSWORD = 'admin123';
 
-export const LOCAL_ADMIN_SESSION_STORAGE_KEY = '@schoolapp:localAdminSession:v1';
+export const LOCAL_ADMIN_SESSION_STORAGE_KEY = '@studystackr:localAdminSession:v1';
 export const LOCAL_ADMIN_ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'v.dev'];
 export const LOCAL_ADMIN_ALLOWED_SUFFIXES = ['.v.dev'];
 

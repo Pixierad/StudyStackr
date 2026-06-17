@@ -26,20 +26,20 @@ if (existsSync(indexPath)) {
   let html = await readFile(indexPath, 'utf8');
   const version = await webBuildVersion();
   const description =
-    'School App is an independent schoolwork planner for tasks, subjects, chats, friends, and profile settings.';
+    "StudyStackr is an independent schoolwork planner for anything school related where you need to keep track of tasks, subjects, and deadlines. It's free to use and open source.";
 
   if (!html.includes('name="description"')) {
     html = html.replace(
-      '<title>School App</title>',
-      `<title>School App</title>\n    <meta name="description" content="${description}" />\n    <link rel="help" href="/contact" />\n    <link rel="terms-of-service" href="/terms" />`
+      '<title>StudyStackr</title>',
+      `<title>StudyStackr</title>\n    <meta name="description" content="${description}" />\n    <link rel="help" href="/contact" />\n    <link rel="terms-of-service" href="/terms" />`
     );
   }
 
   html = html.replace(
     /<noscript>[\s\S]*?<\/noscript>/,
     `<noscript>
-      <h1>School App</h1>
-      <p>School App is an independent schoolwork planner. JavaScript is required to sign in and use the app.</p>
+      <h1>StudyStackr</h1>
+      <p>StudyStackr is an independent schoolwork planner. JavaScript is required to sign in and use the app.</p>
       <p><a href="/privacy">Privacy</a> <a href="/terms">Terms</a> <a href="/contact">Contact</a></p>
     </noscript>`
   );

@@ -1,4 +1,4 @@
-# SchoolApp - Task Tracker
+# StudyStackr - Task Tracker
 
 A clean Expo app for tracking schoolwork across web and mobile. Create tasks, tag them by subject, set due dates, customize the theme, and sync your data with Supabase.
 
@@ -20,7 +20,7 @@ A clean Expo app for tracking schoolwork across web and mobile. Create tasks, ta
 ## Project Structure
 
 ```text
-SchoolApp/
+StudyStackr/
 |-- App.js                         Native/mobile entry point -> apps/mobile
 |-- App.web.js                     Website entry point -> apps/website
 |-- app.json                       Expo app config
@@ -155,7 +155,7 @@ For a direct `dist/` upload with Wrangler, set:
 
 ```powershell
 $env:CLOUDFLARE_PAGES_DIRECT='1'
-$env:CLOUDFLARE_PAGES_PROJECT='schoolapp'
+$env:CLOUDFLARE_PAGES_PROJECT='studystackr'
 npm run deploy -- "Deploy: message here"
 ```
 

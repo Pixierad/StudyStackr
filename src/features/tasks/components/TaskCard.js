@@ -157,6 +157,7 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
     },
     content: {
       flex: 1,
+      minWidth: 0,
       gap: spacing.sm,
     },
     title: {

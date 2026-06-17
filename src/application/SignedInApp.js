@@ -73,7 +73,7 @@ import {
   LOCAL_ADMIN_SESSION_STORAGE_KEY,
 } from '../features/auth/localAdminCredentials';
 
-const ENHANCE_MOTION_STORAGE_KEY = '@schoolapp:enhanceMotion:v1';
+const ENHANCE_MOTION_STORAGE_KEY = '@studystackr:enhanceMotion:v1';
 const ONLINE_HEARTBEAT_MS = 60 * 1000;
 
 function notificationSourceKey(notification = {}) {
@@ -210,11 +210,11 @@ function writeDesktopPath(page, chatRoomId = null, { replace = false } = {}) {
 export default function SignedInApp({ session, setSession }) {
   const { colors, spacing, radius, typography, shadow, isDark } = useTheme();
   const { width } = useWindowDimensions();
+  const isDesktopWeb = Platform.OS === 'web' && width >= 1024;
   const styles = useMemo(
-    () => makeStyles({ colors, spacing, radius, typography }),
-    [colors, spacing, radius, typography]
+    () => makeStyles({ colors, spacing, radius, typography, isDesktopWeb }),
+    [colors, spacing, radius, typography, isDesktopWeb]
   );
-  const isDesktopWeb = Platform.OS === 'web' && width >= 900;
   const initialDesktopRouteRef = useRef(null);
   if (initialDesktopRouteRef.current == null) {
     initialDesktopRouteRef.current = currentDesktopRoute();
@@ -1039,9 +1039,9 @@ export default function SignedInApp({ session, setSession }) {
       >
         {isDesktopWeb ? (
           <View style={[styles.header, styles.desktopHeader]}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.greeting}>{desktopHeaderKicker}</Text>
-              <Text style={styles.headerTitle}>{desktopHeaderTitle}</Text>
+            <View style={styles.headerCopy}>
+              <Text style={styles.greeting} numberOfLines={1}>{desktopHeaderKicker}</Text>
+              <Text style={styles.headerTitle} numberOfLines={1}>{desktopHeaderTitle}</Text>
             </View>
             <View style={styles.headerActions}>
               <DesktopVersionBadge styles={styles} />
@@ -1211,9 +1211,9 @@ export default function SignedInApp({ session, setSession }) {
           <>
         {!isDesktopWeb ? (
           <View style={styles.header}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.greeting}>{greeting(publicName(profile))}</Text>
-              <Text style={styles.headerTitle}>Your tasks</Text>
+            <View style={styles.headerCopy}>
+              <Text style={styles.greeting} numberOfLines={1}>{greeting(publicName(profile))}</Text>
+              <Text style={styles.headerTitle} numberOfLines={1}>Your tasks</Text>
             </View>
             <View style={styles.headerActions}>
               <Pressable
@@ -1525,7 +1525,7 @@ function LoadingSkeleton({ styles, isDesktopWeb }) {
   );
 }
 
-const makeStyles = ({ colors, spacing, radius, typography }) =>
+const makeStyles = ({ colors, spacing, radius, typography, isDesktopWeb }) =>
   StyleSheet.create({
     root: {
       flex: 1,
@@ -1809,6 +1809,11 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       flexDirection: 'row',
       alignItems: 'center',
       gap: spacing.sm,
+      flexShrink: 0,
+    },
+    headerCopy: {
+      flex: 1,
+      minWidth: 0,
     },
     desktopAddBtn: {
       minHeight: 44,
@@ -1910,8 +1915,8 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       position: 'absolute',
       top: spacing.md,
       right: spacing.lg,
-      left: Platform.OS === 'web' ? undefined : spacing.lg,
-      width: Platform.OS === 'web' ? 340 : undefined,
+      left: Platform.OS === 'web' && isDesktopWeb ? undefined : spacing.lg,
+      width: Platform.OS === 'web' && isDesktopWeb ? 340 : undefined,
       zIndex: 30,
       backgroundColor: colors.card,
       borderRadius: radius.lg,
@@ -1942,8 +1947,8 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       position: 'absolute',
       top: 68,
       right: spacing.lg,
-      left: Platform.OS === 'web' ? undefined : spacing.lg,
-      width: Platform.OS === 'web' ? 360 : undefined,
+      left: Platform.OS === 'web' && isDesktopWeb ? undefined : spacing.lg,
+      width: Platform.OS === 'web' && isDesktopWeb ? 360 : undefined,
       maxHeight: 420,
       backgroundColor: colors.card,
       borderRadius: radius.lg,

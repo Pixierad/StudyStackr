@@ -32,23 +32,23 @@ import { supabase } from '../../services/supabase';
 import { isLocalAdminCredentials } from './localAdminCredentials';
 
 const RESEND_COOLDOWN_SECONDS = 30;
-const APP_NAME = 'School App';
+const APP_NAME = 'StudyStackr';
 const SUPPORT_EMAIL = process.env.EXPO_PUBLIC_SUPPORT_EMAIL || '';
 
 const LEGAL_CONTENT = {
   privacy: {
     title: 'Privacy',
     body: [
-      'School App is a schoolwork planner for creating tasks, subjects, friends, chats, and profile details.',
+      'StudyStackr is a schoolwork planner for creating tasks, subjects, friends, chats, and profile details.',
       'When you sign in, the app uses your email address to create and secure your account. App content you save may be synced with the cloud database so it can be available across your devices.',
       'Profile names, usernames, avatars, friend requests, chat rooms, messages, subjects, and tasks are used only to provide the app features shown on this site.',
-      'Do not enter passwords from other services. This sign-in form is only for your School App account.',
+      'Do not enter passwords from other services. This sign-in form is only for your StudyStackr account.',
     ],
   },
   terms: {
     title: 'Terms',
     body: [
-      'Use School App only for your own schoolwork, planning, and communication with people you know.',
+      'Use StudyStackr only for your own schoolwork, planning, and communication with people you know.',
       'You are responsible for the information you add to tasks, profile fields, subjects, friends, and chats.',
       "Do not use the app to impersonate another person, collect someone else\u2019s credentials, post harmful content, or misuse the service.",
       'The app is provided as a school planner and may change as features are improved.',
@@ -289,7 +289,7 @@ export default function AuthScreen({ onLocalAdminSignIn }) {
             <View style={styles.webTrustBox}>
               <Text style={styles.webTrustTitle}>Independent schoolwork planner</Text>
               <Text style={styles.webTrustText}>
-                Sign in only to access your School App tasks, subjects, chats, and profile.
+                Sign in only to access your StudyStackr tasks, subjects, chats, and profile.
                 This site is not asking for any other school, Google, Microsoft, or social media password.
               </Text>
             </View>

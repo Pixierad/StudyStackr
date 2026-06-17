@@ -1,4 +1,4 @@
--- SchoolApp Supabase schema.
+-- StudyStackr Supabase schema.
 --
 -- Paste this entire file into the Supabase SQL Editor
 -- (Project -> SQL Editor -> New query -> Run).

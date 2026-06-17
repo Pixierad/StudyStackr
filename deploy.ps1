@@ -13,7 +13,7 @@
 # the local dist/ folder with Wrangler.
 #
 # Optional project override:
-#     $env:CLOUDFLARE_PAGES_PROJECT = "schoolapp"
+#     $env:CLOUDFLARE_PAGES_PROJECT = "studystackr"
 
 $ErrorActionPreference = 'Stop'
 
@@ -59,7 +59,7 @@ if ($LASTEXITCODE -ne 0 -or -not $originUrl) {
     Write-Host ""
     Write-Host "    Could not read the GitHub remote named 'origin'." -ForegroundColor Red
     Write-Host "    Fix:" -ForegroundColor Yellow
-    Write-Host "      git remote add origin https://github.com/Pixierad/SchoolApp.git" -ForegroundColor Yellow
+    Write-Host "      git remote add origin https://github.com/Pixierad/StudyStackr.git" -ForegroundColor Yellow
     Write-Host ""
     exit 1
 }
@@ -73,7 +73,7 @@ if ($originUrl -match '^https://[^/]+@github\.com/' -or $originUrl -match 'gh[po
         Write-Host "    Your GitHub remote has an old username/token embedded in it, and Git cannot detect the current branch." -ForegroundColor Red
         Write-Host ""
         Write-Host "    Fix:" -ForegroundColor Yellow
-        Write-Host "      git remote set-url origin https://github.com/Pixierad/SchoolApp.git" -ForegroundColor Yellow
+        Write-Host "      git remote set-url origin https://github.com/Pixierad/StudyStackr.git" -ForegroundColor Yellow
         Write-Host "      git push" -ForegroundColor Yellow
         Write-Host ""
         exit 1
@@ -84,10 +84,10 @@ if ($originUrl -match '^https://[^/]+@github\.com/' -or $originUrl -match 'gh[po
     Write-Host "    Using a clean GitHub URL for this push so Git Credential Manager can sign you in." -ForegroundColor Yellow
     Write-Host ""
     Write-Host "    After this deploy, clean up the saved remote with:" -ForegroundColor Yellow
-    Write-Host "      git remote set-url origin https://github.com/Pixierad/SchoolApp.git" -ForegroundColor Yellow
+    Write-Host "      git remote set-url origin https://github.com/Pixierad/StudyStackr.git" -ForegroundColor Yellow
     Write-Host ""
 
-    $pushRemote = "https://github.com/Pixierad/SchoolApp.git"
+    $pushRemote = "https://github.com/Pixierad/StudyStackr.git"
     $pushRef = "HEAD:$currentBranch"
 }
 
@@ -120,7 +120,7 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 Write-Host "[6/6] Cloudflare Pages handoff..." -ForegroundColor Cyan
 
 $cloudflareProject = $env:CLOUDFLARE_PAGES_PROJECT
-if (-not $cloudflareProject) { $cloudflareProject = "schoolapp" }
+if (-not $cloudflareProject) { $cloudflareProject = "studystackr" }
 
 if ($env:CLOUDFLARE_PAGES_DIRECT -eq "1") {
     Write-Host "    Direct deploy enabled for Cloudflare Pages project '$cloudflareProject'." -ForegroundColor Cyan
