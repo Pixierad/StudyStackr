@@ -29,8 +29,11 @@ const LEGAL_CONTENT = {
     title: 'Privacy',
     body: [
       'StudyStackr is a schoolwork planner for creating tasks, subjects, friends, chats, and profile details.',
-      'When you sign in, the app uses your email address to create and secure your account. App content you save may be synced with the cloud database so it can be available across your devices.',
-      'Profile names, usernames, avatars, friend requests, chat rooms, messages, subjects, and tasks are used only to provide the app features shown on this site.',
+      'On your device, the app stores your sign-in session, saved planner data, study-timer state, display and accessibility preferences, and pending changes. This lets the app remember your settings, work offline, and sync changes when a connection is available.',
+      'When you sign in, the app uses your email address and account identifier to create, authenticate, and secure your account. The backend may store the content you choose to save, including your profile name, username, avatar, tasks, subjects, study sessions, friend requests, chat rooms, messages, and account activity such as your last-online time.',
+      'This information is used to provide account access, save and synchronize your planner between devices, show your profile to people you connect with, and deliver friend and chat features. Chat messages, profile information, and other social content may be visible to the people included in the relevant friend or chat feature.',
+      'If you choose a profile photo, the app requests access to your photo library only to let you select that image. The selected image is saved as part of your profile and may be synced to the backend for display in the app.',
+      'The app does not require access to your contacts, location, microphone, or camera for its current features. Do not enter sensitive information that is not needed for your school planning.',
       'Do not enter passwords from other services. This sign-in form is only for your StudyStackr account.',
     ],
   },
