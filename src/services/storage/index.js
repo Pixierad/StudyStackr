@@ -1265,14 +1265,14 @@ export async function addChatParticipants(roomId, friendIds) {
   clearRemoteCache(`chatRooms:${uid}`, `chatMessages:${uid}:${roomId}`);
 }
 
-export async function loadChatMessages(roomId) {
+export async function loadChatMessages(roomId, { fresh = false } = {}) {
   const uid = await cloudMode();
   if (!uid || !roomId) return [];
 
   try {
     const cacheKey = `chatMessages:${uid}:${roomId}`;
     const cached = readFreshRemoteCache(cacheKey);
-    if (cached) return cached;
+    if (cached && !fresh) return cached;
     const { data, error } = await supabase.rpc('list_chat_messages', {
       room_profile_id: roomId,
     });
@@ -1311,6 +1311,23 @@ export async function markChatRead(roomId) {
   const { error } = await supabase.rpc('mark_chat_read', { room_profile_id: roomId });
   if (error) throw error;
   clearRemoteCache(`chatRooms:${uid}`);
+}
+
+export async function syncChatReceipts(roomId, messageIds, readIds = []) {
+  const uid = await cloudMode();
+  if (!uid || !roomId) return [];
+  const { data, error } = await supabase.rpc('sync_chat_receipts', {
+    room_profile_id: roomId,
+    delivered_ids: messageIds,
+    read_ids: readIds,
+  });
+  if (error) throw error;
+  return (data || []).map((row) => ({
+    messageId: row.message_id,
+    userId: row.user_id,
+    deliveredAt: row.delivered_at,
+    readAt: row.read_at,
+  }));
 }
 
 export async function setChatPinned(roomId, pinned) {

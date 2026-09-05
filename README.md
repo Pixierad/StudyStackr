@@ -159,6 +159,10 @@ $env:CLOUDFLARE_PAGES_PROJECT='studystackr'
 npm run deploy -- "Deploy: message here"
 ```
 
+Chat receipt support: apply `migrations/20260905_chat_receipts.sql` in the Supabase SQL editor for an existing database. Fresh installations include it in `supabase-setup.sql`. Receipts record the first time a recipient fetches a message in an active chat (delivered) and views the bottom of that chat (read), and refresh every five seconds while the chat is active. Historical timestamps are not inferred. Until the migration is applied, messages still work and receipt details show as unavailable.
+
+Run receipt marker checks with `node --test src/features/chat/messageReceipts.test.mjs`.
+
 ## Mobile App Roadmap
 
 - Add EAS build config with iOS bundle ID and Android package name.

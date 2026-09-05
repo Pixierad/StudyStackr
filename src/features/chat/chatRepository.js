@@ -15,4 +15,5 @@ export {
   setChatPinned,
   subscribeToChatNotifications,
   subscribeToChatRoom,
+  syncChatReceipts,
 } from '../../services/storage';

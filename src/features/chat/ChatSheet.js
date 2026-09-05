@@ -11,6 +11,7 @@ import {
   KeyboardAvoidingView,
   Keyboard,
   Platform,
+  AppState,
 } from 'react-native';
 
 import { useTheme } from '../../shared/theme';
@@ -30,7 +31,9 @@ import {
   sendChatMessage,
   setChatPinned,
   subscribeToChatRoom,
+  syncChatReceipts,
 } from './chatRepository';
+import { latestReadersByMessage } from './messageReceipts';
 import { normalizeUsername, publicName } from '../../shared/profile';
 import ProfileAvatar from '../profile/ProfileAvatar';
 
@@ -208,7 +211,7 @@ export default function ChatSheet({
 
   const refreshMessages = useCallback(async (roomId) => {
     if (!roomId) return;
-    const items = await loadChatMessages(roomId);
+    const items = await loadChatMessages(roomId, { fresh: true });
     pendingMessagesRef.current = reconcilePendingMessages(
       pendingMessagesRef.current,
       roomId,
@@ -216,7 +219,6 @@ export default function ChatSheet({
     );
     if (activeRoomIdRef.current === roomId) {
       setMessages(mergeChatMessages(items, pendingMessagesRef.current, roomId));
-      markChatRead(roomId).catch(() => {});
       setTimeout(() => messageScrollRef.current?.scrollToEnd?.({ animated: true }), 50);
     }
     return items;
@@ -262,14 +264,14 @@ export default function ChatSheet({
   }, [visible, canUseChats]);
 
   useEffect(() => {
-    if (!activeRoom?.id || mode !== 'room') return undefined;
-    refreshMessages(activeRoom.id);
+    if (!visible || !activeRoom?.id || mode !== 'room') return undefined;
+    refreshMessages(activeRoom.id).catch(() => {});
     const unsubscribe = subscribeToChatRoom(activeRoom.id, () => {
-      refreshMessages(activeRoom.id);
+      refreshMessages(activeRoom.id).catch(() => {});
       refreshRooms().catch(() => {});
     });
     return unsubscribe;
-  }, [activeRoom?.id, mode, refreshMessages, refreshRooms]);
+  }, [visible, activeRoom?.id, mode, refreshMessages, refreshRooms]);
 
   const roomRoutingControlled = activeRoomId !== undefined;
 
@@ -556,6 +558,8 @@ export default function ChatSheet({
             />
           ) : mode === 'room' ? (
             <RoomView
+              key={activeRoom.id}
+              visible={visible}
               styles={styles}
               colors={colors}
               spacing={spacing}
@@ -777,6 +781,7 @@ function CreateView({
 }
 
 function RoomView({
+  visible,
   styles,
   colors,
   spacing,
@@ -790,6 +795,36 @@ function RoomView({
   onSend,
   scrollRef,
 }) {
+  const [receipts, setReceipts] = useState([]);
+  const [receiptsAvailable, setReceiptsAvailable] = useState(false);
+  const atBottomRef = useRef(true);
+  const readMarkers = useMemo(() => latestReadersByMessage(messages, receipts, userId), [messages, receipts, userId]);
+  useEffect(() => {
+    if (!visible || !room?.id) return undefined;
+    let cancelled = false;
+    let running = false;
+    const ids = messages.filter((item) => !item.isLocal && !item.isSystem).map((item) => item.id);
+    const sync = async () => {
+      if (running || cancelled || AppState.currentState === 'background' || AppState.currentState === 'inactive') return;
+      if (Platform.OS === 'web' && (document.visibilityState === 'hidden' || !document.hasFocus())) return;
+      running = true;
+      if (atBottomRef.current) markChatRead(room.id).catch(() => {});
+      try {
+        const next = await syncChatReceipts(room.id, ids, atBottomRef.current ? ids : []);
+        if (!cancelled) {
+          setReceipts(next);
+          setReceiptsAvailable(true);
+        }
+      } catch {
+        if (!cancelled) setReceiptsAvailable(false);
+      } finally {
+        running = false;
+      }
+    };
+    sync();
+    const timer = setInterval(sync, 5000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [visible, room?.id, messages]);
   const [selection, setSelection] = useState({ start: draft.length, end: draft.length });
   const [measuredInputHeight, setMeasuredInputHeight] = useState(0);
   const [measuredTextHeight, setMeasuredTextHeight] = useState(0);
@@ -874,6 +909,10 @@ function RoomView({
     >
       <ScrollView
         ref={scrollRef}
+        onScroll={({ nativeEvent: { contentOffset, contentSize, layoutMeasurement } }) => {
+          atBottomRef.current = contentOffset.y + layoutMeasurement.height >= contentSize.height - 24;
+        }}
+        scrollEventThrottle={100}
         contentContainerStyle={styles.messagesContent}
         keyboardShouldPersistTaps="handled"
         onContentSizeChange={() => scrollRef.current?.scrollToEnd?.({ animated: true })}
@@ -906,6 +945,7 @@ function RoomView({
                   <View style={styles.messageAvatarSpacer} />
                 )
               ) : null}
+              <View style={styles.messageColumn}>
               <View
                 style={[
                   styles.bubble,
@@ -938,6 +978,17 @@ function RoomView({
                     {item.localStatus === 'failed' ? 'Not sent' : 'Sending...'}
                   </Text>
                 ) : null}
+              </View>
+              {!item.isLocal ? (
+                <MessageReceiptIndicator
+                  styles={styles}
+                  mine={mine}
+                  members={room.members || []}
+                  receipts={receipts.filter((receipt) => receipt.messageId === item.id)}
+                  readers={readMarkers.get(item.id) || []}
+                  available={receiptsAvailable}
+                />
+              ) : null}
               </View>
             </View>
           );
@@ -1020,6 +1071,57 @@ function RoomView({
         </Pressable>
       </View>
     </KeyboardAvoidingView>
+  );
+}
+
+function MessageReceiptIndicator({ styles, mine, members, receipts, readers, available }) {
+  const [hovered, setHovered] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [focused, setFocused] = useState(false);
+  if (!mine && readers.length === 0) return null;
+  const open = hovered || expanded || focused;
+  const group = members.length > 2;
+  const timestamp = (value) => value ? new Date(value).toLocaleString() : 'Pending';
+  const personFor = (id) => members.find((person) => person.id === id) || { id };
+  return (
+    <View onPointerEnter={() => setHovered(true)} onPointerLeave={() => setHovered(false)}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Message delivery and read details"
+        accessibilityState={{ expanded: open }}
+        onHoverIn={() => setHovered(true)}
+        onHoverOut={() => setHovered(false)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        onPress={() => { setFocused(false); setExpanded((value) => !value); }}
+        style={[styles.receiptTrigger, mine && styles.receiptTriggerMine]}
+      >
+        {readers.map((reader) => <ProfileAvatar key={reader.userId} profile={personFor(reader.userId)} size={20} />)}
+        {readers.length === 0 ? <Text style={styles.receiptText}>{!available ? 'Status unavailable' : receipts.some((r) => r.readAt) ? 'Read' : receipts.some((r) => r.deliveredAt) ? 'Delivered' : 'Sent'}</Text> : null}
+      </Pressable>
+      {open ? (
+        <View style={styles.receiptDetails}>
+          {!available ? <Text style={styles.receiptText}>Delivery and read details are currently unavailable.</Text> : group ? (
+            ['Delivered', 'Read'].map((label) => {
+              const field = label === 'Read' ? 'readAt' : 'deliveredAt';
+              const people = receipts.filter((receipt) => receipt[field]);
+              return <View key={label} style={styles.receiptSection}>
+                <Text style={styles.senderName}>{label} ({people.length}/{receipts.length})</Text>
+                {people.length === 0 ? <Text style={styles.receiptText}>No one yet</Text> : people.map((receipt) => (
+                  <View key={receipt.userId} style={styles.receiptPerson}>
+                    <ProfileAvatar profile={personFor(receipt.userId)} size={20} />
+                    <Text style={styles.receiptText}>{publicName(personFor(receipt.userId))}{'\n'}{timestamp(receipt[field])}</Text>
+                  </View>
+                ))}
+              </View>;
+            })
+          ) : (
+            <Text style={styles.receiptText}>Delivered: {timestamp(receipts[0]?.deliveredAt)}{'\n'}Read: {timestamp(receipts[0]?.readAt)}</Text>
+          )}
+          <Pressable accessibilityRole="button" onPress={() => { setExpanded(false); setHovered(false); setFocused(false); }}><Text style={styles.receiptText}>Close</Text></Pressable>
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -1891,7 +1993,9 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       flexDirection: 'row',
       alignItems: 'flex-end',
       gap: spacing.sm,
-      maxWidth: '86%',
+      maxWidth: '84%',
+      minWidth: 0,
+      alignSelf: 'flex-start',
     },
     messageRowMine: {
       alignSelf: 'flex-end',
@@ -1900,7 +2004,18 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
     messageAvatarSpacer: {
       width: 30,
       height: 30,
+      flexShrink: 0,
     },
+    messageColumn: {
+      minWidth: 0,
+      flexShrink: 1,
+    },
+    receiptTrigger: { minHeight: 32, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 4 },
+    receiptTriggerMine: { justifyContent: 'flex-end' },
+    receiptDetails: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.sm, gap: spacing.sm },
+    receiptSection: { gap: spacing.xs },
+    receiptPerson: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+    receiptText: { color: colors.textMuted, fontSize: 11, lineHeight: 16, flexShrink: 1, ...(Platform.OS === 'web' ? { overflowWrap: 'anywhere' } : {}) },
     systemMessageRow: {
       alignItems: 'center',
       paddingVertical: spacing.xs,
@@ -1922,6 +2037,9 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       textAlign: 'center',
     },
     bubble: {
+      minWidth: 0,
+      maxWidth: '100%',
+      flexShrink: 1,
       backgroundColor: colors.card,
       borderRadius: radius.lg,
       borderBottomLeftRadius: radius.sm,
@@ -1958,6 +2076,9 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       color: colors.primary,
     },
     messageText: {
+      minWidth: 0,
+      flexShrink: 1,
+      ...(Platform.OS === 'web' ? { overflowWrap: 'anywhere', wordBreak: 'break-word' } : {}),
       color: colors.text,
       fontSize: 15,
       lineHeight: 20,
