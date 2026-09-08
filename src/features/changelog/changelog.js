@@ -17,6 +17,15 @@
 
 export const CHANGELOG = [
   {
+    version: '0.3.2',
+    date: '2026-09-05',
+    title: 'Chat improvements' ,
+    notes: [
+      'Improvement: Chat messages now have read receipts for better understanding of knowledge.',
+      'Bug fix: Fixed an issue where text would not be wrapping appropriately when chat messages spanned multiple lines.'
+    ],
+  },
+  {
     version: '0.3.1',
     date: '2026-05-23',
     title: 'Minor Backend changes',
@@ -45,7 +54,7 @@ export const CHANGELOG = [
     title: 'Even MORE QoL improvements',
     notes: [
       'Improvement: Split between mobile and desktop Web experience for ease of use on both platforms',
-      'Improvement: Sorted backend out to allow for easier pushes to multiplt services at once',
+      'Improvement: Sorted backend out to allow for easier pushes to multiple services at once',
       'Improvement: Chat is now fullscreen on all platforms',
       'Upcoming: Potential Ko-Fi link or voluntary ads to allow me to push this service to mobile and keep it free for everyone :) (NO ADS ON FRONT PAGE I\'M NOT THAT BAD!)',
       'Upcoming: More fluid web experience with more pages and less sheets for a more native feel',

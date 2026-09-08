@@ -65,6 +65,38 @@ Copy-Item .env.local.example .env.local
 
 Then run the SQL in `supabase-setup.sql` inside the Supabase SQL Editor. It creates `profiles`, `friends`, `subjects`, and `tasks`, enables row-level security, and adds per-user policies.
 
+For existing databases, run `migrations/20260908_data_integrity.sql` in the
+Supabase SQL Editor as the database owner. The same migration is included at
+the end of `supabase-setup.sql` for new installations. It runs in one transaction
+and is safe to repeat. It restores missing profiles without changing existing
+profile details or deleting accounts and their saved data. It briefly locks the
+affected tables while validating and installing constraints; apply during a quiet
+period. Unexpected invalid historical records cause a rollback instead of being
+silently removed.
+
+The database automatically creates a profile on signup, prevents direct profile
+deletion/ID changes while an account exists, and requires all application user
+references to have a profile. Delete unwanted accounts through Supabase Auth;
+the existing deletion cascades still work. Email confirmation is unaffected.
+Friendship pairs must be added/removed together, room creators and message senders
+must belong to their room, and message receipts must reference a member of the
+message's room. Existing RPCs perform these writes transactionally. The migration
+also validates study-session times, room expiry, friend-request response state,
+and message length/sender presence.
+
+Task and study-session subject names remain optional historical labels, not
+foreign keys: the current app allows subjects to be renamed/deleted separately.
+These constraints cover defined relationships; they cannot prevent every possible
+application error or changes made by an administrator disabling protections.
+
+SQL regression checks run against an isolated PGlite PostgreSQL runtime, with no
+live database connection. Install the test-only runtime outside the app and run:
+
+```powershell
+npm.cmd install --prefix "$env:TEMP/studystackr-sql-tests" --no-save --ignore-scripts --no-audit --no-fund @electric-sql/pglite
+node scripts/test-data-integrity.mjs "$env:TEMP/studystackr-sql-tests/node_modules/@electric-sql/pglite/dist/index.js"
+```
+
 Start the web app:
 
 ```powershell

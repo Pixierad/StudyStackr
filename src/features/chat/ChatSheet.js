@@ -799,6 +799,13 @@ function RoomView({
   const [receiptsAvailable, setReceiptsAvailable] = useState(false);
   const atBottomRef = useRef(true);
   const readMarkers = useMemo(() => latestReadersByMessage(messages, receipts, userId), [messages, receipts, userId]);
+  const lastSentMessageId = useMemo(() => {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const item = messages[index];
+      if (item.senderId === userId && !item.isLocal && !item.isSystem) return item.id;
+    }
+    return null;
+  }, [messages, userId]);
   useEffect(() => {
     if (!visible || !room?.id) return undefined;
     let cancelled = false;
@@ -979,7 +986,7 @@ function RoomView({
                   </Text>
                 ) : null}
               </View>
-              {!item.isLocal ? (
+              {!item.isLocal && (item.id === lastSentMessageId || readMarkers.has(item.id)) ? (
                 <MessageReceiptIndicator
                   styles={styles}
                   mine={mine}
