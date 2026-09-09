@@ -154,6 +154,7 @@ function applyPendingRoomPreviews(rooms, pendingMessages = []) {
 
 export default function ChatSheet({
   visible,
+  active = visible,
   embedded = false,
   activeRoomId,
   onRoomChange,
@@ -315,16 +316,16 @@ export default function ChatSheet({
   }, [onRoomChange]);
 
   useEffect(() => {
-    if (!visible || !roomRoutingControlled || !activeRoomId) return;
+    if (!active || !roomRoutingControlled || !activeRoomId) return;
     if (activeRoom?.id === activeRoomId) return;
     const routedRoom = rooms.find((room) => room.id === activeRoomId);
     if (routedRoom) openRoom(routedRoom);
-  }, [activeRoom?.id, activeRoomId, openRoom, roomRoutingControlled, rooms, visible]);
+  }, [activeRoom?.id, activeRoomId, openRoom, roomRoutingControlled, rooms, active]);
 
   useEffect(() => {
-    if (!visible || !roomRoutingControlled || activeRoomId || mode !== 'room') return;
+    if (!active || !roomRoutingControlled || activeRoomId || mode !== 'room') return;
     backToList();
-  }, [activeRoomId, backToList, mode, roomRoutingControlled, visible]);
+  }, [activeRoomId, backToList, mode, roomRoutingControlled, active]);
 
   const toggleFriend = (id) => {
     setSelectedFriendIds((prev) =>
@@ -559,7 +560,7 @@ export default function ChatSheet({
           ) : mode === 'room' ? (
             <RoomView
               key={activeRoom.id}
-              visible={visible}
+              visible={active}
               styles={styles}
               colors={colors}
               spacing={spacing}

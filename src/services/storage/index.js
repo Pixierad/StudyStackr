@@ -1403,6 +1403,27 @@ export function subscribeToFriendRequests(userId, onChange) {
 
 export function subscribeToChatNotifications(userId, onMessage) {
   if (!supabase || !userId || typeof onMessage !== 'function') return () => {};
+  const pendingDelivery = new Map();
+  let stopped = false;
+  let syncing = false;
+  const flushDelivery = async () => {
+    if (stopped || syncing || pendingDelivery.size === 0) return;
+    syncing = true;
+    try {
+      for (const [id, roomId] of pendingDelivery) {
+        if (stopped) break;
+        try {
+          await syncChatReceipts(roomId, [id], []);
+          pendingDelivery.delete(id);
+        } catch {
+          // Retain the update and retry transient connection failures.
+        }
+      }
+    } finally {
+      syncing = false;
+    }
+  };
+  const deliveryTimer = setInterval(flushDelivery, 5000);
   const channel = supabase
     .channel(`chat-notifications-${userId}`)
     .on(
@@ -1416,6 +1437,12 @@ export function subscribeToChatNotifications(userId, onMessage) {
         const row = payload?.new;
         if (row?.sender_id && row.sender_id !== userId) {
           clearRemoteCache(`chatRooms:${userId}`);
+          // Receiving the realtime update is delivery, regardless of the
+          // current page or browser focus. Read acknowledgement stays in chat.
+          if (row.id && row.room_id && row.message_type === 'message') {
+            pendingDelivery.set(row.id, row.room_id);
+            flushDelivery();
+          }
           onMessage(row);
         }
       }
@@ -1423,6 +1450,9 @@ export function subscribeToChatNotifications(userId, onMessage) {
     .subscribe();
 
   return () => {
+    stopped = true;
+    clearInterval(deliveryTimer);
+    pendingDelivery.clear();
     supabase.removeChannel(channel);
   };
 }

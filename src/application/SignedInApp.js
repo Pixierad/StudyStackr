@@ -248,6 +248,8 @@ export default function SignedInApp({ session, setSession }) {
   const [desktopChatRoomId, setDesktopChatRoomId] = useState(initialDesktopRouteRef.current.chatRoomId);
   const [mobileChatRoomId, setMobileChatRoomId] = useState(null);
   const [renderedDesktopPage, setRenderedDesktopPage] = useState(initialDesktopRouteRef.current.page);
+  const visitedDesktopPages = useRef(new Set());
+  if (isDesktopWeb) visitedDesktopPages.current.add(renderedDesktopPage);
   const previousDesktopPageRef = useRef(initialDesktopRouteRef.current.page);
   const pendingDesktopPageRef = useRef(null);
   const [desktopTaskSubjectsVisible, setDesktopTaskSubjectsVisible] = useState(false);
@@ -281,7 +283,7 @@ export default function SignedInApp({ session, setSession }) {
 
   const applyDesktopRoute = useCallback((route) => {
     setDesktopPage(route.page);
-    setDesktopChatRoomId(route.chatRoomId);
+    if (route.page === 'chats') setDesktopChatRoomId(route.chatRoomId);
     setSettingsVisible(false);
     setChatsVisible(false);
   }, []);
@@ -395,7 +397,7 @@ export default function SignedInApp({ session, setSession }) {
     return () => {
       cancelled = true;
     };
-  }, [session, sessionUserId]);
+  }, [sessionUserId, localAdminSession]);
 
   useEffect(() => {
     if (!sessionUserId) return undefined;
@@ -943,7 +945,7 @@ export default function SignedInApp({ session, setSession }) {
     else setFriendsVisible(true);
   }, [isDesktopWeb, navigateDesktopPage]);
 
-  const openChats = useCallback((chatRoomId = null) => {
+  const openChats = useCallback((chatRoomId = desktopChatRoomId) => {
     if (chatRoomId) clearNotificationsForSource('chat', chatRoomId);
     if (isDesktopWeb) {
       navigateDesktopPage('chats', chatRoomId);
@@ -951,7 +953,7 @@ export default function SignedInApp({ session, setSession }) {
       setMobileChatRoomId(chatRoomId);
       setChatsVisible(true);
     }
-  }, [clearNotificationsForSource, isDesktopWeb, navigateDesktopPage]);
+  }, [clearNotificationsForSource, desktopChatRoomId, isDesktopWeb, navigateDesktopPage]);
 
   const handleDesktopChatRoomChange = useCallback((chatRoomId) => {
     if (chatRoomId) clearNotificationsForSource('chat', chatRoomId);
@@ -1024,7 +1026,7 @@ export default function SignedInApp({ session, setSession }) {
           onStudy={openStudy}
           onSubjects={openSubjects}
           onFriends={openFriends}
-          onChats={openChats}
+          onChats={() => openChats()}
           onProfile={() => setProfileVisible(true)}
           styles={styles}
           shadow={shadow}
@@ -1105,10 +1107,12 @@ export default function SignedInApp({ session, setSession }) {
           </View>
         ) : null}
 
-        {isDesktopWeb && renderedDesktopPage !== 'tasks' ? (
+        {isDesktopWeb ? [...visitedDesktopPages.current].filter((page) => page !== 'tasks').map((page) => (
           <Animated.View
+            key={page}
             style={[
               styles.desktopPage,
+              renderedDesktopPage !== page && { display: 'none' },
               enhanceMotion && {
                 opacity: desktopPageMotion,
                 transform: [
@@ -1123,7 +1127,7 @@ export default function SignedInApp({ session, setSession }) {
             ]}
           >
             <Suspense fallback={<DesktopPageFallback styles={styles} colors={colors} />}>
-              {renderedDesktopPage === 'study' ? (
+              {page === 'study' ? (
                 <StudyPage
                   sessions={studySessions}
                   subjects={subjects}
@@ -1133,7 +1137,7 @@ export default function SignedInApp({ session, setSession }) {
                   onDeleteSession={handleDeleteStudySession}
                 />
               ) : null}
-              {renderedDesktopPage === 'subjects' ? (
+              {page === 'subjects' ? (
                 <SubjectManager
                   visible
                   embedded
@@ -1143,7 +1147,7 @@ export default function SignedInApp({ session, setSession }) {
                   taskCountsBySubject={taskCountsBySubject}
                 />
               ) : null}
-              {renderedDesktopPage === 'friends' ? (
+              {page === 'friends' ? (
                 <FriendsSheet
                   visible
                   embedded
@@ -1151,9 +1155,10 @@ export default function SignedInApp({ session, setSession }) {
                   session={session}
                 />
               ) : null}
-              {renderedDesktopPage === 'chats' ? (
+              {page === 'chats' ? (
                 <ChatSheet
                   visible
+                  active={desktopPage === 'chats'}
                   embedded
                   activeRoomId={desktopChatRoomId}
                   onRoomChange={handleDesktopChatRoomChange}
@@ -1162,7 +1167,7 @@ export default function SignedInApp({ session, setSession }) {
                   profile={profile}
                 />
               ) : null}
-              {renderedDesktopPage === 'settings' ? (
+              {page === 'settings' ? (
                 <SettingsSheet
                   visible
                   embedded
@@ -1179,10 +1184,11 @@ export default function SignedInApp({ session, setSession }) {
               ) : null}
             </Suspense>
           </Animated.View>
-        ) : (
+        )) : null}
           <Animated.View
             style={[
               styles.tasksPage,
+              isDesktopWeb && renderedDesktopPage !== 'tasks' && { display: 'none' },
               isDesktopWeb && enhanceMotion && {
                 opacity: desktopPageMotion,
                 transform: [
@@ -1196,7 +1202,8 @@ export default function SignedInApp({ session, setSession }) {
               },
             ]}
           >
-        {!isDesktopWeb && mobilePage === 'study' ? (
+        {!isDesktopWeb ? (
+          <View style={{ flex: 1, display: mobilePage === 'study' ? 'flex' : 'none' }}>
           <Suspense fallback={<DesktopPageFallback styles={styles} colors={colors} />}>
             <StudyPage
               sessions={studySessions}
@@ -1207,8 +1214,9 @@ export default function SignedInApp({ session, setSession }) {
               onDeleteSession={handleDeleteStudySession}
             />
           </Suspense>
-        ) : (
-          <>
+          </View>
+        ) : null}
+          <View style={{ flex: 1, display: !isDesktopWeb && mobilePage === 'study' ? 'none' : 'flex' }}>
         {!isDesktopWeb ? (
           <View style={styles.header}>
             <View style={styles.headerCopy}>
@@ -1304,8 +1312,7 @@ export default function SignedInApp({ session, setSession }) {
             />
           }
         />
-          </>
-        )}
+          </View>
 
         {!isDesktopWeb ? (
           <BottomActionBar
@@ -1315,14 +1322,12 @@ export default function SignedInApp({ session, setSession }) {
             onAddSubject={openSubjects}
             onStudy={openStudy}
             onFriends={openFriends}
-            onChats={openChats}
+            onChats={() => openChats()}
             styles={styles}
             shadow={shadow}
           />
         ) : null}
           </Animated.View>
-        )}
-
       </Animated.View>
 
       <Suspense fallback={null}>

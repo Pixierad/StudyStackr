@@ -74,10 +74,17 @@ affected tables while validating and installing constraints; apply during a quie
 period. Unexpected invalid historical records cause a rollback instead of being
 silently removed.
 
-The database automatically creates a profile on signup, prevents direct profile
-deletion/ID changes while an account exists, and requires all application user
-references to have a profile. Delete unwanted accounts through Supabase Auth;
-the existing deletion cascades still work. Email confirmation is unaffected.
+Also run `migrations/20260908_profile_account_deletion.sql` after the integrity
+migration (both are included in the full setup). It enables deleting an account
+by deleting its row from `public.profiles` in the database dashboard. That action
+permanently deletes the matching Auth user and its dependent data, including
+tasks, subjects, study sessions, friendships, and rooms created by that user.
+Installing the migration itself does not delete any accounts. Auth-first deletion
+also works; failure in either direction rolls back the whole deletion. Existing
+RLS policies remain unchanged, so ordinary app clients cannot delete profiles.
+Profile ID changes and profile truncation while accounts exist remain blocked.
+The database automatically creates a profile on signup and requires all application
+user references to have a profile. Email confirmation is unaffected.
 Friendship pairs must be added/removed together, room creators and message senders
 must belong to their room, and message receipts must reference a member of the
 message's room. Existing RPCs perform these writes transactionally. The migration

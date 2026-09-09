@@ -8,7 +8,10 @@ const db = new PGlite();
 const setup = readFileSync(new URL('../supabase-setup.sql', import.meta.url), 'utf8');
 const migration = readFileSync(new URL('../migrations/20260908_data_integrity.sql', import.meta.url), 'utf8');
 const marker = '-- Data integrity migration (keep in sync with migrations/20260908_data_integrity.sql).';
-assert.equal(setup.split(marker)[1].trim(), migration.trim(), 'setup and migration must match');
+const deletionMarker = '-- Profile account deletion migration (keep in sync with migrations/20260908_profile_account_deletion.sql).';
+const deletionMigration = readFileSync(new URL('../migrations/20260908_profile_account_deletion.sql', import.meta.url), 'utf8');
+assert.equal(setup.split(marker)[1].split(deletionMarker)[0].trim(), migration.trim(), 'setup and migration must match');
+assert.equal(setup.split(deletionMarker)[1].trim(), deletionMigration.trim(), 'deletion migration must match');
 await db.exec(`
   create role anon; create role authenticated;
   create schema auth;
@@ -98,6 +101,54 @@ try {
   await db.exec(setup.replace('create extension if not exists pgcrypto;', ''));
   await check('full setup can be reapplied after migration',
     'select count(*)::int as n from public.profiles', [{n:1}]);
+  await db.exec(deletionMigration);
+  await db.exec(deletionMigration);
+  await db.exec(`insert into auth.users(id) values ('${a}'),('${b}');
+    insert into public.tasks(id,user_id) values ('delete-task','${a}');
+    insert into public.subjects(user_id,name) values ('${a}','Math');
+    insert into public.study_sessions(id,user_id) values ('delete-session','${a}');
+    begin;
+    insert into public.friends(user_id,friend_id) values ('${a}','${b}'),('${b}','${a}');
+    insert into public.chat_rooms(id,created_by) values ('${room}','${a}');
+    insert into public.chat_room_members(room_id,user_id) values ('${room}','${a}'),('${room}','${b}');
+    insert into public.chat_messages(id,room_id,sender_id,body) values ('${msg}','${room}','${a}','Hello');
+    insert into public.chat_message_receipts(message_id,user_id) values ('${msg}','${b}'); commit;`);
+  // A dependent constraint can block Auth deletion (e.g. externally owned data).
+  // The original profile must survive such a failure as well.
+  await db.exec(`create table public.deletion_blocker(user_id uuid references auth.users);
+    insert into public.deletion_blocker values ('${a}')`);
+  await rejects('blocked auth deletion rolls back profile deletion', `delete from public.profiles where id='${a}'`, '23503');
+  await check('failed deletion preserves account and profile',
+    `select (select count(*) from auth.users where id='${a}')::int as users,
+      (select count(*) from public.profiles where id='${a}')::int as profiles`, [{users:1,profiles:1}]);
+  await db.exec('drop table public.deletion_blocker');
+  await db.exec(`delete from public.profiles where id='${a}'`);
+  await check('profile deletion removes Auth and all dependent fixtures',
+    `select (select count(*) from auth.users where id='${a}')::int as users,
+      (select count(*) from public.tasks)::int as tasks,
+      (select count(*) from public.subjects)::int as subjects,
+      (select count(*) from public.study_sessions)::int as sessions,
+      (select count(*) from public.friends)::int as friends,
+      (select count(*) from public.chat_rooms)::int as rooms,
+      (select count(*) from public.chat_room_members)::int as members,
+      (select count(*) from public.chat_messages)::int as messages,
+      (select count(*) from public.chat_message_receipts)::int as receipts`,
+    [{users:0,tasks:0,subjects:0,sessions:0,friends:0,rooms:0,members:0,messages:0,receipts:0}]);
+  await check('unrelated account survives profile deletion',
+    `select count(*)::int as n from public.profiles where id='${b}'`, [{n:1}]);
+  await db.exec(`delete from auth.users where id='${b}'`);
+  await check('Auth-first deletion still works with reverse trigger',
+    `select count(*)::int as n from public.profiles where id='${b}'`, [{n:0}]);
+  await rejects('profile ID protection retained', `update public.profiles set id=gen_random_uuid() where id='${c}'`, '23514');
+  await rejects('profile truncate protection retained', 'truncate public.profiles cascade', '23503');
+  await db.exec(`grant usage on schema public to authenticated;
+    grant select, delete on public.profiles to authenticated;
+    set role authenticated;
+    select set_config('request.jwt.claim.sub','${c}',false);
+    delete from public.profiles where id='${c}';
+    reset role;`);
+  await check('existing RLS still denies client-side profile deletion',
+    `select count(*)::int as n from auth.users where id='${c}'`, [{n:1}]);
   // Simulate unexpected legacy data and ensure a failed migration does not
   // leave even its earlier profile backfill partially applied.
   await db.exec(`alter table public.study_sessions drop constraint study_sessions_time_order_check;
