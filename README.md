@@ -152,7 +152,7 @@ Both values are required for the web login and sign-out flow. If either one is
 missing, the website will stay on `/login` and show a configuration message
 instead of silently opening the local-only app.
 
-The `public/_redirects` file rewrites app routes such as `/login`, `/study`, `/friends`, `/subjects`, and `/chats/:id` to `index.html` so direct visits and refreshes work on Cloudflare Pages. The `public/_headers` file adds basic security headers and requires browser revalidation for deployed files so users do not stay pinned to stale Expo entry bundles after a successful deploy. The web export helper also appends the build version to Expo script URLs so a new deploy has a new browser cache key even when Metro reuses a bundle filename.
+Cloudflare Pages' built-in SPA fallback serves `index.html` at app routes such as `/login`, `/study`, `/friends`, `/subjects`, and `/chats/:id`, preserving the URL on direct visits and refreshes. Do not add a top-level `404.html` or explicit rewrites to `/index.html`: the former disables the fallback, and the latter causes Pages to canonicalize the URL to `/` with a 308 redirect. Static pages such as `/privacy`, `/terms`, and `/contact` use Pages' automatic extensionless HTML handling. The comments-only `public/_redirects` replaces old rewrite rules during export. The `public/_headers` file adds basic security headers and requires browser revalidation for deployed files so users do not stay pinned to stale Expo entry bundles after a successful deploy. The web export helper also appends the build version to Expo script URLs so a new deploy has a new browser cache key even when Metro reuses a bundle filename.
 
 After adding a production custom domain in Cloudflare, update Supabase auth settings:
 

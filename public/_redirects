@@ -1,10 +1,5 @@
-/privacy /privacy.html 200
-/terms /terms.html 200
-/contact /contact.html 200
-/login /index.html 200
-/settings /index.html 200
-/study /index.html 200
-/subjects /index.html 200
-/friends /index.html 200
-/chats /index.html 200
-/chats/* /index.html 200
+# Cloudflare Pages serves .html files at their extensionless URLs automatically.
+# With no top-level 404.html, its SPA fallback serves index.html at app routes
+# while preserving the requested URL. Do not rewrite routes to /index.html:
+# Pages canonicalizes that target to / and returns a 308 redirect on reload.
+# Keep this file so copying public/ replaces any previous build's rewrite rules.
