@@ -6,6 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 
 import { ThemeProvider, useTheme } from '../../src/shared/theme';
 import { supabase, isSupabaseConfigured } from '../../src/services/supabase';
+import { authPathFor } from './authRouting';
 import {
   createLocalAdminSession,
   isLocalAdminAccessAllowed,
@@ -19,17 +20,9 @@ const allowLocalWebsiteMode = process.env.EXPO_PUBLIC_ALLOW_WEB_LOCAL_MODE === '
 
 function writeWebPath(path, { replace = true } = {}) {
   if (Platform.OS !== 'web' || typeof window === 'undefined') return;
-  if (window.location.pathname === path) return;
+  if (`${window.location.pathname}${window.location.search}${window.location.hash}` === path) return;
   const method = replace ? 'replaceState' : 'pushState';
   window.history[method]?.(null, '', path);
-}
-
-function isLoginPath() {
-  if (Platform.OS !== 'web' || typeof window === 'undefined') return false;
-  const normalized = `/${String(window.location.pathname || '/')
-    .replace(/^\/+/, '')
-    .replace(/\/+$/, '')}`;
-  return normalized === '/login';
 }
 
 export default function WebsiteApp() {
@@ -46,7 +39,15 @@ function WebsiteAuthGate() {
   const { colors, isDark } = useTheme();
   const styles = makeStyles(colors);
   const authConfigurationMissing = !isSupabaseConfigured && !allowLocalWebsiteMode;
-  const [session, setSession] = useState(isSupabaseConfigured ? undefined : null);
+  const [session, updateSession] = useState(isSupabaseConfigured ? undefined : null);
+  const setSession = useCallback((nextSession) => {
+    // Restore the URL before SignedInApp mounts and reads its initial route.
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const path = authPathFor(nextSession, window.location);
+      if (path) writeWebPath(path);
+    }
+    updateSession(nextSession);
+  }, []);
 
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) return undefined;
@@ -72,6 +73,7 @@ function WebsiteAuthGate() {
 
     const { data: sub } = supabase.auth.onAuthStateChange(async (_event, nextSession) => {
       const savedLocalAdmin = await AsyncStorage.getItem(LOCAL_ADMIN_SESSION_STORAGE_KEY);
+      if (!mounted) return;
       if (savedLocalAdmin === 'true' && isLocalAdminAccessAllowed()) return;
       setSession(nextSession ?? null);
     });
@@ -80,27 +82,21 @@ function WebsiteAuthGate() {
       mounted = false;
       sub?.subscription?.unsubscribe?.();
     };
-  }, []);
+  }, [setSession]);
 
   useEffect(() => {
     if (authConfigurationMissing) {
       writeWebPath('/login');
       return;
     }
-    if (!isSupabaseConfigured || session === undefined) return;
-    if (!session) {
-      writeWebPath('/login');
-      return;
-    }
-    if (isLoginPath()) writeWebPath('/');
-  }, [authConfigurationMissing, session]);
+  }, [authConfigurationMissing]);
 
   const handleLocalAdminSignIn = useCallback(async () => {
     if (!isLocalAdminAccessAllowed()) return;
     await AsyncStorage.setItem(LOCAL_ADMIN_SESSION_STORAGE_KEY, 'true');
     if (supabase) await supabase.auth.signOut().catch(() => {});
     setSession(createLocalAdminSession());
-  }, []);
+  }, [setSession]);
 
   if (authConfigurationMissing) {
     return (

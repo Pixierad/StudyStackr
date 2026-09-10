@@ -21,6 +21,8 @@ import {
   StyleSheet,
   ScrollView,
   Animated,
+  Easing,
+  AccessibilityInfo,
   Dimensions,
   PanResponder,
   Platform,
@@ -186,7 +188,7 @@ export default function ChangelogSheet({ visible, entries = [], onClose }) {
                         </View>
                       </View>
                     </Pressable>
-                    {expanded ? (
+                    <ChangelogDropdown expanded={expanded}>
                       <View style={styles.notes}>
                         {entry.notes.map((note, i) => (
                           <View key={i} style={styles.noteRow}>
@@ -195,7 +197,7 @@ export default function ChangelogSheet({ visible, entries = [], onClose }) {
                           </View>
                         ))}
                       </View>
-                    ) : null}
+                    </ChangelogDropdown>
                   </View>
                 );
               })
@@ -204,6 +206,61 @@ export default function ChangelogSheet({ visible, entries = [], onClose }) {
         </Animated.View>
       </View>
     </Modal>
+  );
+}
+
+function ChangelogDropdown({ expanded, children }) {
+  const [contentHeight, setContentHeight] = useState(0);
+  const [reduceMotion, setReduceMotion] = useState(false);
+  const progressRef = useRef(null);
+  if (progressRef.current === null) {
+    progressRef.current = new Animated.Value(expanded ? 1 : 0);
+  }
+  const progress = progressRef.current;
+
+  useEffect(() => {
+    let mounted = true;
+    AccessibilityInfo.isReduceMotionEnabled().then((enabled) => {
+      if (mounted) setReduceMotion(enabled);
+    }).catch(() => {});
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
+    return () => {
+      mounted = false;
+      subscription.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    const animation = Animated.timing(progress, {
+      toValue: expanded ? 1 : 0,
+      duration: reduceMotion ? 0 : 240,
+      easing: Easing.out(Easing.cubic),
+      // Height must animate in layout so the following entries move with it.
+      useNativeDriver: false,
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [expanded, progress, reduceMotion]);
+
+  return (
+    <Animated.View
+      pointerEvents={expanded ? 'auto' : 'none'}
+      accessibilityElementsHidden={!expanded}
+      importantForAccessibility={expanded ? 'auto' : 'no-hide-descendants'}
+      aria-hidden={!expanded}
+      style={{
+        overflow: 'hidden',
+        height: progress.interpolate({ inputRange: [0, 1], outputRange: [0, contentHeight] }),
+        opacity: progress,
+      }}
+    >
+      <View
+        style={{ position: 'absolute', top: 0, left: 0, right: 0 }}
+        onLayout={({ nativeEvent }) => setContentHeight(nativeEvent.layout.height)}
+      >
+        {children}
+      </View>
+    </Animated.View>
   );
 }
 
@@ -287,7 +344,6 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       borderWidth: 1,
       borderColor: colors.border,
       padding: spacing.lg,
-      gap: spacing.sm,
     },
     entryToggle: {
       borderRadius: radius.md,
@@ -368,7 +424,7 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
     },
     notes: {
       gap: spacing.xs,
-      marginTop: spacing.xs,
+      paddingTop: spacing.sm + spacing.xs,
     },
     noteRow: {
       flexDirection: 'row',

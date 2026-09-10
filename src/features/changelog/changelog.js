@@ -17,6 +17,25 @@
 
 export const CHANGELOG = [
   {
+    version: '0.3.4',
+    date: '2026-09-10',
+    title: 'Minor bug fixes' ,
+    notes: [
+      'Bug fix: Fixed an issue where reloading the page would reset to main tasks page with no path.',
+      'Bug fix: Fixed an issue where the scroll bar would conflict with the read receipts and cause jittering',
+      'Improvement: Added a drop down animation to the change log :)'
+    ],
+  },
+  {
+    version: '0.3.3',
+    date: '2026-09-09',
+    title: 'QOL again' ,
+    notes: [
+      'Improvement: The page no longer remounts when you switch to a different tab',
+      'Bug fix: Solved an issue where the delivered status would fail to update even if the recieving user had recieved the message',
+    ],
+  },
+  {
     version: '0.3.2',
     date: '2026-09-05',
     title: 'Chat improvements' ,
