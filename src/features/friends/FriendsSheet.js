@@ -344,11 +344,7 @@ export default function FriendsSheet({ visible, embedded = false, onClose, sessi
             </View>
           </View>
 
-          <ScrollView
-            style={styles.embeddedContentScroll}
-            contentContainerStyle={styles.content}
-            keyboardShouldPersistTaps="handled"
-          >
+          <View style={styles.embeddedContent}>
           {!canUseFriends ? (
             <View style={styles.notice}>
               <Text style={styles.noticeTitle}>Friend search needs an account</Text>
@@ -358,126 +354,120 @@ export default function FriendsSheet({ visible, embedded = false, onClose, sessi
             </View>
           ) : (
             <>
-              <View style={styles.section}>
-                <Text style={styles.sectionLabel}>Find people</Text>
-                <TextInput
-                  value={query}
-                  onChangeText={setQuery}
-                  placeholder="Search name or username"
-                  placeholderTextColor={colors.textFaint}
-                  style={styles.input}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-                {searching ? <ActivityIndicator color={colors.primary} /> : null}
-                {message ? (
-                  <View style={styles.errorBox}>
-                    <Text style={styles.errorText}>{message}</Text>
-                  </View>
-                ) : null}
-                {results.length > 0 ? (
-                  <ScrollView
-                    style={styles.compactListFrame}
-                    contentContainerStyle={styles.listFrameContent}
-                    nestedScrollEnabled
-                    keyboardShouldPersistTaps="handled"
-                  >
-                    {results.map((person) => (
-                      <SearchResultRow
-                        key={person.id}
-                        person={person}
-                        busy={busyId === person.id}
-                        onAdd={() => handleAdd(person)}
-                        onAccept={() => handleAccept(person)}
-                        onOpenProfile={() => setPreviewPerson(person)}
-                        styles={styles}
-                      />
-                    ))}
-                  </ScrollView>
-                ) : null}
-                {query.trim().length >= 1 && !searching && results.length === 0 ? (
-                  <Text style={styles.emptyText}>No matching profiles yet.</Text>
-                ) : null}
-              </View>
-
-              {requests.incoming.length > 0 ? (
-                <View style={styles.section}>
-                  <Text style={styles.sectionLabel}>Friend requests</Text>
-                  <ScrollView
-                    style={styles.compactListFrame}
-                    contentContainerStyle={styles.listFrameContent}
-                    nestedScrollEnabled
-                  >
-                    {requests.incoming.map((person) => (
-                      <FriendRequestRow
-                        key={person.id}
-                        person={person}
-                        busy={busyId === person.id}
-                        onAccept={() => handleAccept(person)}
-                        onDecline={() => handleDecline(person)}
-                        onOpenProfile={() => setPreviewPerson(person)}
-                        styles={styles}
-                      />
-                    ))}
-                  </ScrollView>
+              {message ? (
+                <View style={styles.errorBox}>
+                  <Text style={styles.errorText}>{message}</Text>
                 </View>
               ) : null}
+              <View style={styles.friendsLayout}>
+                    <View style={styles.pageSection}>
+                      <Text style={styles.sectionLabel}>Current friends</Text>
+                    <ScrollView
+                        style={styles.pageListFrame}
+                        contentContainerStyle={styles.listFrameContent}
+                      >
+                        {loadingFriends ? <ActivityIndicator color={colors.primary} /> : null}
+                        {!loadingFriends && friends.length === 0 ? (
+                          <Text style={styles.emptyText}>Friends you add will show up here.</Text>
+                        ) : null}
+                        {friends.map((person) => (
+                          <FriendRow
+                            key={person.id}
+                            person={person}
+                            busy={busyId === person.id}
+                            actionLabel="Remove"
+                            danger
+                            onPress={() => handleRemove(person)}
+                            onOpenProfile={() => setPreviewPerson(person)}
+                            showStatus
+                            statusNow={statusNow}
+                            styles={styles}
+                          />
+                        ))}
+                    </ScrollView>
+                    </View>
 
-              <View style={styles.section}>
-                <Text style={styles.sectionLabel}>Requests sent</Text>
-                <ScrollView
-                  style={styles.listFrame}
-                  contentContainerStyle={styles.listFrameContent}
-                  nestedScrollEnabled
-                >
-                  {requests.outgoing.length === 0 ? (
-                    <Text style={styles.emptyText}>Requests you send will show up here.</Text>
-                  ) : (
-                    requests.outgoing.map((person) => (
-                      <FriendRow
-                        key={person.id}
-                        person={person}
-                        busy={busyId === person.id}
-                        actionLabel="Requested"
-                        disabled
-                        onOpenProfile={() => setPreviewPerson(person)}
-                        styles={styles}
-                      />
-                    ))
-                  )}
-                </ScrollView>
-              </View>
+                    <View style={styles.rightColumn}>
+                      <View style={styles.pageSection}>
+                        <Text style={styles.sectionLabel}>Friend requests</Text>
+                        <ScrollView style={styles.pageListFrame} contentContainerStyle={styles.listFrameContent} keyboardShouldPersistTaps="handled">
+                          <Text style={styles.sectionLabel}>Incoming</Text>
+                          {requests.incoming.length === 0 ? (
+                            <Text style={styles.emptyText}>No incoming friend requests.</Text>
+                          ) : null}
+                          {requests.incoming.map((person) => (
+                            <FriendRequestRow
+                              key={person.id}
+                              person={person}
+                              busy={busyId === person.id}
+                              onAccept={() => handleAccept(person)}
+                              onDecline={() => handleDecline(person)}
+                              onOpenProfile={() => setPreviewPerson(person)}
+                              styles={styles}
+                            />
+                          ))}
 
-              <View style={styles.section}>
-                <Text style={styles.sectionLabel}>Friends</Text>
-                <ScrollView
-                  style={styles.listFrame}
-                  contentContainerStyle={styles.listFrameContent}
-                  nestedScrollEnabled
-                >
-                  {loadingFriends ? <ActivityIndicator color={colors.primary} /> : null}
-                  {!loadingFriends && friends.length === 0 ? (
-                    <Text style={styles.emptyText}>Friends you add will show up here.</Text>
-                  ) : null}
-                  {friends.map((person) => (
-                    <FriendRow
-                      key={person.id}
-                      person={person}
-                      busy={busyId === person.id}
-                      actionLabel="Remove"
-                      danger
-                      onPress={() => handleRemove(person)}
-                      onOpenProfile={() => setPreviewPerson(person)}
-                      showStatus
-                      statusNow={statusNow}
-                      styles={styles}
+                          <Text style={styles.sectionLabel}>Requests sent</Text>
+                          {requests.outgoing.length === 0 ? (
+                            <Text style={styles.emptyText}>Requests you send will show up here.</Text>
+                          ) : (
+                            requests.outgoing.map((person) => (
+                              <FriendRow
+                                key={person.id}
+                                person={person}
+                                busy={busyId === person.id}
+                                actionLabel="Requested"
+                                disabled
+                                onOpenProfile={() => setPreviewPerson(person)}
+                                styles={styles}
+                              />
+                            ))
+                          )}
+
+                        </ScrollView>
+                      </View>
+                  <View style={styles.pageSection}>
+                    <Text style={styles.sectionLabel}>Find people</Text>
+                    <TextInput
+                      value={query}
+                      onChangeText={setQuery}
+                      placeholder="Search name or username"
+                      placeholderTextColor={colors.textFaint}
+                      style={styles.input}
+                      autoCapitalize="none"
+                      autoCorrect={false}
                     />
-                  ))}
-                </ScrollView>
+
+                      <ScrollView
+                        style={styles.pageListFrame}
+                        contentContainerStyle={styles.listFrameContent}
+                        keyboardShouldPersistTaps="handled"
+                      >
+                      {searching ? <ActivityIndicator color={colors.primary} /> : null}
+                        {results.map((person) => (
+                          <SearchResultRow
+                            key={person.id}
+                            person={person}
+                            busy={busyId === person.id}
+                            onAdd={() => handleAdd(person)}
+                            onAccept={() => handleAccept(person)}
+                            onOpenProfile={() => setPreviewPerson(person)}
+                            styles={styles}
+                          />
+                        ))}
+                      {!searching && results.length === 0 ? (
+                        <Text style={styles.emptyText}>
+                          {query.trim() ? 'No matching profiles yet.' : 'Search for people by name or username.'}
+                        </Text>
+                      ) : null}
+                      </ScrollView>
+                  </View>
+
+                </View>
               </View>
             </>
           )}
-          </ScrollView>
+          </View>
         </View>
         {previewPerson ? (
           <ProfilePreviewModal
@@ -914,6 +904,7 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
     },
     embeddedWindow: {
       flex: 1,
+      minHeight: 0,
       alignSelf: 'stretch',
       maxWidth: undefined,
       maxHeight: undefined,
@@ -926,8 +917,42 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       borderBottomColor: colors.border,
       paddingVertical: spacing.xs,
     },
-    embeddedContentScroll: {
+    embeddedContent: {
       flex: 1,
+      minHeight: 0,
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.lg,
+      gap: spacing.md,
+      overflow: 'hidden',
+    },
+    friendsLayout: {
+      flex: 1,
+      minHeight: 0,
+      flexDirection: 'row',
+      gap: spacing.lg,
+      overflow: 'hidden',
+    },
+    pageSection: {
+      flex: 1,
+      minWidth: 0,
+      minHeight: 0,
+      gap: spacing.sm,
+      overflow: 'hidden',
+    },
+    rightColumn: {
+      flex: 1,
+      minWidth: 0,
+      minHeight: 0,
+      gap: spacing.lg,
+      overflow: 'hidden',
+    },
+    pageListFrame: {
+      flex: 1,
+      minHeight: 0,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.cardMuted,
     },
     dragZone: {
       paddingBottom: spacing.sm,
