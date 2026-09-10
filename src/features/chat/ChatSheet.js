@@ -648,7 +648,12 @@ function ListView({ styles, rooms, userId, loading, message, onCreate, onOpen, o
         </Pressable>
       </View>
 
-      <ScrollView style={styles.chatList} contentContainerStyle={styles.chatListContent}>
+      <ScrollView
+        style={styles.chatList}
+        contentContainerStyle={styles.chatListContent}
+        showsVerticalScrollIndicator={false}
+        showsHorizontalScrollIndicator={false}
+      >
         {message ? <MessageBox styles={styles} text={message} /> : null}
         {loading ? <ActivityIndicator /> : null}
         {!loading && rooms.length === 0 ? (
@@ -688,6 +693,8 @@ function CreateView({
     <View style={styles.createWrap}>
       <ScrollView
         style={styles.createScroll}
+        showsVerticalScrollIndicator={false}
+        showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.createContent}
         keyboardShouldPersistTaps="handled"
       >
@@ -917,6 +924,8 @@ function RoomView({
     >
       <ScrollView
         ref={scrollRef}
+        showsVerticalScrollIndicator={false}
+        showsHorizontalScrollIndicator={false}
         onScroll={({ nativeEvent: { contentOffset, contentSize, layoutMeasurement } }) => {
           atBottomRef.current = contentOffset.y + layoutMeasurement.height >= contentSize.height - 24;
         }}
@@ -1308,6 +1317,8 @@ function ChatDetailsPanel({
             </View>
             <ScrollView
               style={styles.participantsFrame}
+              showsVerticalScrollIndicator={false}
+              showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.participantsContent}
               keyboardShouldPersistTaps="handled"
               nestedScrollEnabled
@@ -1420,6 +1431,8 @@ function AddParticipantsPanel({
         />
         <ScrollView
           style={styles.addParticipantList}
+          showsVerticalScrollIndicator={false}
+          showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.addParticipantListContent}
           keyboardShouldPersistTaps="handled"
         >
