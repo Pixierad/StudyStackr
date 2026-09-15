@@ -23,7 +23,9 @@ export const CHANGELOG = [
     notes: [
       'Bug fix: Fixed an issue where reloading the page would reset to main tasks page with no path.',
       'Bug fix: Fixed an issue where the scroll bar would conflict with the read receipts and cause jittering',
-      'Improvement: Added a drop down animation to the change log :)'
+      'Improvement: Added a drop down animation to the change log :)',
+      'Upcoming: Possible timetable feature e.g. one week or two week timetables.',
+      'Upcoming: Interactive school map (I have no clue on how to implement this)'
     ],
   },
   {
