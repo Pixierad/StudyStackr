@@ -34,6 +34,7 @@ import {
   syncChatReceipts,
 } from './chatRepository';
 import { latestReadersByMessage } from './messageReceipts';
+import ReceiptPopover from './ReceiptPopover';
 import { normalizeUsername, publicName } from '../../shared/profile';
 import ProfileAvatar from '../profile/ProfileAvatar';
 
@@ -1101,13 +1102,32 @@ function MessageReceiptIndicator({ styles, mine, members, receipts, readers, ava
   const timestamp = (value) => value ? new Date(value).toLocaleString() : 'Pending';
   const personFor = (id) => members.find((person) => person.id === id) || { id };
   return (
-    <View onPointerEnter={() => setHovered(true)} onPointerLeave={() => setHovered(false)}>
+    <ReceiptPopover open={open} onHoverChange={setHovered} details={
+      <View style={styles.receiptDetails}>
+        {!available ? <Text style={styles.receiptText}>Delivery and read details are currently unavailable.</Text> : group ? (
+          ['Delivered', 'Read'].map((label) => {
+            const field = label === 'Read' ? 'readAt' : 'deliveredAt';
+            const people = receipts.filter((receipt) => receipt[field]);
+            return <View key={label} style={styles.receiptSection}>
+              <Text style={styles.senderName}>{label} ({people.length}/{receipts.length})</Text>
+              {people.length === 0 ? <Text style={styles.receiptText}>No one yet</Text> : people.map((receipt) => (
+                <View key={receipt.userId} style={styles.receiptPerson}>
+                  <ProfileAvatar profile={personFor(receipt.userId)} size={20} />
+                  <Text style={styles.receiptText}>{publicName(personFor(receipt.userId))}{'\n'}{timestamp(receipt[field])}</Text>
+                </View>
+              ))}
+            </View>;
+          })
+        ) : (
+          <Text style={styles.receiptText}>Delivered: {timestamp(receipts[0]?.deliveredAt)}{'\n'}Read: {timestamp(receipts[0]?.readAt)}</Text>
+        )}
+        <Pressable accessibilityRole="button" onPress={() => { setExpanded(false); setHovered(false); setFocused(false); }}><Text style={styles.receiptText}>Close</Text></Pressable>
+      </View>
+    }>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Message delivery and read details"
         accessibilityState={{ expanded: open }}
-        onHoverIn={() => setHovered(true)}
-        onHoverOut={() => setHovered(false)}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         onPress={() => { setFocused(false); setExpanded((value) => !value); }}
@@ -1116,29 +1136,7 @@ function MessageReceiptIndicator({ styles, mine, members, receipts, readers, ava
         {readers.map((reader) => <ProfileAvatar key={reader.userId} profile={personFor(reader.userId)} size={20} />)}
         {readers.length === 0 ? <Text style={styles.receiptText}>{!available ? 'Status unavailable' : receipts.some((r) => r.readAt) ? 'Read' : receipts.some((r) => r.deliveredAt) ? 'Delivered' : 'Sent'}</Text> : null}
       </Pressable>
-      {open ? (
-        <View style={styles.receiptDetails}>
-          {!available ? <Text style={styles.receiptText}>Delivery and read details are currently unavailable.</Text> : group ? (
-            ['Delivered', 'Read'].map((label) => {
-              const field = label === 'Read' ? 'readAt' : 'deliveredAt';
-              const people = receipts.filter((receipt) => receipt[field]);
-              return <View key={label} style={styles.receiptSection}>
-                <Text style={styles.senderName}>{label} ({people.length}/{receipts.length})</Text>
-                {people.length === 0 ? <Text style={styles.receiptText}>No one yet</Text> : people.map((receipt) => (
-                  <View key={receipt.userId} style={styles.receiptPerson}>
-                    <ProfileAvatar profile={personFor(receipt.userId)} size={20} />
-                    <Text style={styles.receiptText}>{publicName(personFor(receipt.userId))}{'\n'}{timestamp(receipt[field])}</Text>
-                  </View>
-                ))}
-              </View>;
-            })
-          ) : (
-            <Text style={styles.receiptText}>Delivered: {timestamp(receipts[0]?.deliveredAt)}{'\n'}Read: {timestamp(receipts[0]?.readAt)}</Text>
-          )}
-          <Pressable accessibilityRole="button" onPress={() => { setExpanded(false); setHovered(false); setFocused(false); }}><Text style={styles.receiptText}>Close</Text></Pressable>
-        </View>
-      ) : null}
-    </View>
+    </ReceiptPopover>
   );
 }
 
