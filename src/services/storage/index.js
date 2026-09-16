@@ -1351,6 +1351,32 @@ export async function hideChatRoom(roomId) {
 
 export function subscribeToChatRoom(roomId, onChange) {
   if (!supabase || !roomId || typeof onChange !== 'function') return () => {};
+  let stopped = false;
+  let refreshing = false;
+  let queued = false;
+  const refresh = async () => {
+    if (stopped) return;
+    if (refreshing) {
+      queued = true;
+      return;
+    }
+    refreshing = true;
+    try {
+      do {
+        queued = false;
+        const uid = await currentUserId();
+        if (stopped) return;
+        if (uid) clearRemoteCache(`chatRooms:${uid}`, `chatMessages:${uid}:${roomId}`);
+        await onChange();
+      } while (queued && !stopped);
+    } catch (error) {
+      console.warn('Chat refresh failed; will retry:', error?.message);
+    } finally {
+      refreshing = false;
+    }
+  };
+  // Keep catching up even if a connected socket silently misses database events.
+  const timer = setInterval(refresh, 3000);
   const channel = supabase
     .channel(`chat-room-${roomId}`)
     .on(
@@ -1361,17 +1387,16 @@ export function subscribeToChatRoom(roomId, onChange) {
         table: 'chat_messages',
         filter: `room_id=eq.${roomId}`,
       },
-      () => {
-        currentUserId()
-          .then((uid) => {
-            if (uid) clearRemoteCache(`chatRooms:${uid}`, `chatMessages:${uid}:${roomId}`);
-          })
-          .finally(() => onChange());
-      }
+      refresh
     )
-    .subscribe();
+    .subscribe((status) => {
+      // Close the initial fetch/subscribe gap and recover after reconnecting.
+      if (status === 'SUBSCRIBED') refresh();
+    });
 
   return () => {
+    stopped = true;
+    clearInterval(timer);
     supabase.removeChannel(channel);
   };
 }

@@ -220,8 +220,10 @@ export default function ChatSheet({
       items
     );
     if (activeRoomIdRef.current === roomId) {
-      setMessages(mergeChatMessages(items, pendingMessagesRef.current, roomId));
-      setTimeout(() => messageScrollRef.current?.scrollToEnd?.({ animated: true }), 50);
+      const nextMessages = mergeChatMessages(items, pendingMessagesRef.current, roomId);
+      setMessages((current) =>
+        JSON.stringify(current) === JSON.stringify(nextMessages) ? current : nextMessages
+      );
     }
     return items;
   }, []);
@@ -266,14 +268,15 @@ export default function ChatSheet({
   }, [visible, canUseChats]);
 
   useEffect(() => {
-    if (!visible || !activeRoom?.id || mode !== 'room') return undefined;
+    if (!visible || !active || !activeRoom?.id || mode !== 'room') return undefined;
     refreshMessages(activeRoom.id).catch(() => {});
     const unsubscribe = subscribeToChatRoom(activeRoom.id, () => {
-      refreshMessages(activeRoom.id).catch(() => {});
-      refreshRooms().catch(() => {});
+      if (AppState.currentState === 'background' || AppState.currentState === 'inactive') return;
+      if (Platform.OS === 'web' && document.visibilityState === 'hidden') return;
+      return Promise.all([refreshMessages(activeRoom.id), refreshRooms()]);
     });
     return unsubscribe;
-  }, [visible, activeRoom?.id, mode, refreshMessages, refreshRooms]);
+  }, [visible, active, activeRoom?.id, mode, refreshMessages, refreshRooms]);
 
   const roomRoutingControlled = activeRoomId !== undefined;
 

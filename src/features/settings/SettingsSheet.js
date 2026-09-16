@@ -204,6 +204,7 @@ export default function SettingsSheet({
                 <Pressable
                   onPress={() => onEnhanceMotionChange?.(!enhanceMotion)}
                   accessibilityRole="switch"
+                  accessibilityLabel="Enhance motion"
                   accessibilityState={{ checked: enhanceMotion }}
                   style={styles.switchRow}
                 >
@@ -1056,18 +1057,18 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       width: 48,
       height: 28,
       borderRadius: radius.pill,
-      backgroundColor: colors.borderStrong,
+      backgroundColor: '#dc2626',
       padding: 3,
       justifyContent: 'center',
     },
     switchTrackOn: {
-      backgroundColor: colors.primary,
+      backgroundColor: '#16a34a',
     },
     switchThumb: {
       width: 22,
       height: 22,
       borderRadius: 11,
-      backgroundColor: colors.card,
+      backgroundColor: '#ffffff',
     },
     switchThumbOn: {
       alignSelf: 'flex-end',

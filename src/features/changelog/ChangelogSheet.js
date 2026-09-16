@@ -37,6 +37,7 @@ export default function ChangelogSheet({ visible, entries = [], onClose }) {
     [colors, spacing, radius, typography]
   );
   const [expandedVersions, setExpandedVersions] = useState(() => new Set());
+  const latestVersion = entries[0]?.version;
 
   // Lazily allocate the Animated.Value so re-renders don't churn it.
   const translateYRef = useRef(null);
@@ -65,11 +66,10 @@ export default function ChangelogSheet({ visible, entries = [], onClose }) {
         bounciness: 0,
         speed: 20,
       }).start();
-      const latest = entries[0]?.version;
-      if (latest) saveChangelogLastSeen(latest);
-      setExpandedVersions(new Set(latest ? [latest] : []));
+      if (latestVersion) saveChangelogLastSeen(latestVersion);
+      setExpandedVersions(new Set(latestVersion ? [latestVersion] : []));
     }
-  }, [visible, translateY, screenHeight, entries]);
+  }, [visible, translateY, screenHeight, latestVersion]);
 
   const closeWithAnimation = () => {
     Animated.timing(translateY, {
@@ -188,7 +188,7 @@ export default function ChangelogSheet({ visible, entries = [], onClose }) {
                         </View>
                       </View>
                     </Pressable>
-                    <ChangelogDropdown expanded={expanded}>
+                    <ChangelogDropdown visible={visible} expanded={expanded}>
                       <View style={styles.notes}>
                         {entry.notes.map((note, i) => (
                           <View key={i} style={styles.noteRow}>
@@ -209,12 +209,12 @@ export default function ChangelogSheet({ visible, entries = [], onClose }) {
   );
 }
 
-function ChangelogDropdown({ expanded, children }) {
+function ChangelogDropdown({ visible, expanded, children }) {
   const [contentHeight, setContentHeight] = useState(0);
   const [reduceMotion, setReduceMotion] = useState(false);
   const progressRef = useRef(null);
   if (progressRef.current === null) {
-    progressRef.current = new Animated.Value(expanded ? 1 : 0);
+    progressRef.current = new Animated.Value(0);
   }
   const progress = progressRef.current;
 
@@ -231,6 +231,13 @@ function ChangelogDropdown({ expanded, children }) {
   }, []);
 
   useEffect(() => {
+    if (!visible) {
+      progress.setValue(0);
+      return undefined;
+    }
+    // Layout may arrive after opening the modal. Don't spend the animation
+    // on a zero-height container and then snap to the measured height.
+    if (contentHeight <= 0) return undefined;
     const animation = Animated.timing(progress, {
       toValue: expanded ? 1 : 0,
       duration: reduceMotion ? 0 : 240,
@@ -240,7 +247,7 @@ function ChangelogDropdown({ expanded, children }) {
     });
     animation.start();
     return () => animation.stop();
-  }, [expanded, progress, reduceMotion]);
+  }, [visible, expanded, contentHeight, progress, reduceMotion]);
 
   return (
     <Animated.View
