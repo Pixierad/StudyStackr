@@ -20,7 +20,9 @@ import {
   previewColorsFor,
   isValidHex,
   softFromPrimary,
+  buildTheme,
 } from '../../shared/theme';
+import ToggleTrack from '../../shared/components/ToggleTrack';
 
 const SUPPORT_EMAIL = process.env.EXPO_PUBLIC_SUPPORT_EMAIL || '';
 
@@ -136,6 +138,7 @@ export default function SettingsSheet({
   };
 
   const allThemeKeys = [...THEME_PRESET_KEYS, ...customThemes.map((t) => t.key)];
+  const draftTheme = useMemo(() => buildTheme(draftThemeKey, customThemes), [draftThemeKey, customThemes]);
 
   const content = (
       <View style={styles.settingsScreen}>
@@ -198,6 +201,12 @@ export default function SettingsSheet({
               </Text>
             </View>
 
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>Theme preview</Text>
+              <ThemePreview theme={draftTheme} styles={styles} />
+              <Text style={styles.hint}>Previewing {draftTheme.themeLabel}. Choose Confirm to apply.</Text>
+            </View>
+
             {Platform.OS === 'web' ? (
               <View style={styles.section}>
                 <Text style={styles.sectionLabel}>Experience</Text>
@@ -211,12 +220,10 @@ export default function SettingsSheet({
                   <View style={{ flex: 1 }}>
                     <Text style={styles.switchTitle}>Enhance motion</Text>
                     <Text style={styles.hint}>
-                      Tween desktop workspace changes between sidebar pages.
+                      Animate switches and desktop workspace changes between sidebar pages.
                     </Text>
                   </View>
-                  <View style={[styles.switchTrack, enhanceMotion && styles.switchTrackOn]}>
-                    <View style={[styles.switchThumb, enhanceMotion && styles.switchThumbOn]} />
-                  </View>
+                  <ToggleTrack checked={enhanceMotion} enhanceMotion={enhanceMotion} />
                 </Pressable>
               </View>
             ) : null}
@@ -337,6 +344,40 @@ export default function SettingsSheet({
   );
 }
 
+function ThemePreview({ theme, styles }) {
+  const { colors } = theme;
+  return (
+    <View style={[styles.previewPane, { backgroundColor: colors.bg, borderColor: colors.border }]}>
+      <Text style={[styles.previewTitle, { color: colors.text }]}>Your study planner</Text>
+      <Text style={{ color: colors.textMuted, fontSize: 14 }}>A little progress, every day.</Text>
+      <View style={[styles.previewCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={[styles.previewDot, { backgroundColor: colors.primary }]} />
+        <View style={{ flex: 1, gap: 4 }}>
+          <Text style={{ color: colors.text, fontWeight: '700', fontSize: 15 }}>Revise for biology</Text>
+          <Text style={{ color: colors.textMuted, fontSize: 13 }}>Biology · Tomorrow</Text>
+        </View>
+        <View style={[styles.previewBadge, { backgroundColor: colors.primarySoft }]}>
+          <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 12 }}>To do</Text>
+        </View>
+      </View>
+      <View style={[styles.previewProgressCard, { backgroundColor: colors.cardMuted }]}>
+        <Text style={{ color: colors.text, fontWeight: '600', fontSize: 13 }}>Daily progress · 2 of 3 tasks</Text>
+        <View style={[styles.previewProgressTrack, { backgroundColor: colors.border }]}>
+          <View style={{ width: '67%', height: '100%', backgroundColor: colors.primary }} />
+        </View>
+      </View>
+      <View style={styles.previewActions}>
+        <View style={[styles.previewButton, { backgroundColor: colors.primary }]}>
+          <Text style={{ color: colors.primaryText, fontWeight: '700' }}>+ Add task</Text>
+        </View>
+        <View style={[styles.previewButton, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}>
+          <Text style={{ color: colors.text, fontWeight: '600' }}>View subjects</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 // A card that previews a theme using its actual bg / card / primary colors.
 function ThemeTile({ preview, selected, onPress, onLongPress, styles }) {
   const border = selected ? preview.primary : 'transparent';
@@ -352,6 +393,7 @@ function ThemeTile({ preview, selected, onPress, onLongPress, styles }) {
         pressed && styles.themeTilePressed,
       ]}
       accessibilityLabel={preview.label}
+      accessibilityState={{ selected }}
       accessibilityRole="button"
     >
       <View style={styles.themeTileTop}>
@@ -1053,26 +1095,11 @@ const makeStyles = ({ colors, spacing, radius, typography }) =>
       color: colors.text,
       marginBottom: 2,
     },
-    switchTrack: {
-      width: 48,
-      height: 28,
-      borderRadius: radius.pill,
-      backgroundColor: '#dc2626',
-      padding: 3,
-      justifyContent: 'center',
-    },
-    switchTrackOn: {
-      backgroundColor: '#16a34a',
-    },
-    switchThumb: {
-      width: 22,
-      height: 22,
-      borderRadius: 11,
-      backgroundColor: '#ffffff',
-    },
-    switchThumbOn: {
-      alignSelf: 'flex-end',
-    },
+    previewBadge: { borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
+    previewProgressCard: { borderRadius: radius.md, padding: spacing.md, gap: spacing.sm },
+    previewProgressTrack: { height: 6, borderRadius: radius.pill, overflow: 'hidden' },
+    previewActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+    previewButton: { borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
 
     // What's-new row
     changelogRow: {
