@@ -23,6 +23,7 @@ import {
   buildTheme,
 } from '../../shared/theme';
 import ToggleTrack from '../../shared/components/ToggleTrack';
+import CustomColorPicker from '../../shared/components/CustomColorPicker';
 
 const SUPPORT_EMAIL = process.env.EXPO_PUBLIC_SUPPORT_EMAIL || '';
 
@@ -612,6 +613,7 @@ function CustomThemeBuilder({ visible, onClose, onCreate }) {
                   Hex must look like #RRGGBB (or #RGB).
                 </Text>
               ) : null}
+              <CustomColorPicker value={primary} onChange={setPrimary} />
             </View>
 
             {/* Live preview */}

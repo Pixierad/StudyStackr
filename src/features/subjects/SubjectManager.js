@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import { useTheme } from '../../shared/theme';
 import { resolveSubjectStyle, SUBJECT_COLOR_PRESETS } from '../../shared/utils/subjects';
+import CustomColorPicker from '../../shared/components/CustomColorPicker';
 
 export default function SubjectManager({
   visible,
@@ -637,6 +638,7 @@ function SubjectEditor({ visible, embedded = false, isNew, initial, onCancel, on
               <Text style={styles.hint}>
                 "Auto" picks a color from the theme based on the subject name.
               </Text>
+              <CustomColorPicker value={color} onChange={setColor} />
             </View>
           </ScrollView>
 
@@ -784,6 +786,7 @@ function SubjectEditor({ visible, embedded = false, isNew, initial, onCancel, on
               <Text style={styles.hint}>
                 "Auto" picks a color from the theme based on the subject name.
               </Text>
+              <CustomColorPicker value={color} onChange={setColor} />
             </View>
           </ScrollView>
 

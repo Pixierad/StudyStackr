@@ -21,6 +21,16 @@ export const CHANGELOG = [
     date: '2026-09-10',
     title: 'Minor bug fixes' ,
     notes: [
+      'Improvement: Colourpicker cuz yeah',
+      'Bug fix: Chat bug fix lol where messages wouldn\'t show as soon as they were sent',
+      'Bug fix: changelog animations not playing on some devices'
+    ],
+  },
+  {
+    version: '0.3.4',
+    date: '2026-09-10',
+    title: 'Minor bug fixes' ,
+    notes: [
       'Bug fix: Fixed an issue where reloading the page would reset to main tasks page with no path.',
       'Bug fix: Fixed an issue where the scroll bar would conflict with the read receipts and cause jittering',
       'Improvement: Added a drop down animation to the change log :)',
