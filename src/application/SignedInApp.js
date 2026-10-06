@@ -150,6 +150,7 @@ const ProfileOnboarding = React.lazy(() => import('../features/profile/ProfileOn
 const ChangelogSheet = React.lazy(() => import('../features/changelog/ChangelogSheet'));
 const FriendsSheet = React.lazy(() => import('../features/friends/FriendsSheet'));
 const ChatSheet = React.lazy(() => import('../features/chat/ChatSheet'));
+const TimetablePage = React.lazy(() => import('../features/timetable/TimetablePage'));
 const StudyPage = React.lazy(() => import('../features/study/StudyPage'));
 
 const DESKTOP_ROUTE_FALLBACK = { page: 'tasks', chatRoomId: null };
@@ -175,6 +176,7 @@ function desktopRouteFromPath(pathname) {
   if (normalized === '/login') return DESKTOP_ROUTE_FALLBACK;
   if (normalized === '/settings') return { page: 'settings', chatRoomId: null };
   if (normalized === '/chats') return { page: 'chats', chatRoomId: null };
+  if (normalized === '/timetable') return { page: 'timetable', chatRoomId: null };
   if (normalized === '/study') return { page: 'study', chatRoomId: null };
   if (normalized === '/subjects') return { page: 'subjects', chatRoomId: null };
   if (normalized === '/friends') return { page: 'friends', chatRoomId: null };
@@ -190,6 +192,7 @@ function desktopRouteFromPath(pathname) {
 function desktopPathFor(page, chatRoomId = null) {
   if (page === 'login') return '/login';
   if (page === 'settings') return '/settings';
+  if (page === 'timetable') return '/timetable';
   if (page === 'study') return '/study';
   if (page === 'subjects') return '/subjects';
   if (page === 'friends') return '/friends';
@@ -935,6 +938,11 @@ export default function SignedInApp({ session, setSession }) {
     else setSubjectMgrVisible(true);
   }, [isDesktopWeb, navigateDesktopPage]);
 
+  const openTimetable = useCallback(() => {
+    if (isDesktopWeb) navigateDesktopPage('timetable');
+    else setMobilePage('timetable');
+  }, [isDesktopWeb, navigateDesktopPage]);
+
   const openStudy = useCallback(() => {
     if (isDesktopWeb) navigateDesktopPage('study');
     else setMobilePage('study');
@@ -971,7 +979,7 @@ export default function SignedInApp({ session, setSession }) {
   }, [isDesktopWeb, navigateDesktopPage]);
 
   const desktopHeaderTitle =
-    desktopPage === 'subjects'
+    desktopPage === 'timetable' ? 'Timetable' : desktopPage === 'subjects'
       ? 'Subjects'
       : desktopPage === 'study'
         ? 'Study'
@@ -1024,6 +1032,7 @@ export default function SignedInApp({ session, setSession }) {
           onToggle={() => setDesktopSidebarCollapsed((value) => !value)}
           onTasks={() => navigateDesktopPage('tasks')}
           onStudy={openStudy}
+            onTimetable={openTimetable}
           onSubjects={openSubjects}
           onFriends={openFriends}
           onChats={() => openChats()}
@@ -1127,6 +1136,7 @@ export default function SignedInApp({ session, setSession }) {
             ]}
           >
             <Suspense fallback={<DesktopPageFallback styles={styles} colors={colors} />}>
+              {page === 'timetable' ? <TimetablePage key={sessionUserId || 'local'} subjects={subjects} storageScope={sessionUserId} isDesktopWeb /> : null}
               {page === 'study' ? (
                 <StudyPage
                   sessions={studySessions}
@@ -1202,6 +1212,7 @@ export default function SignedInApp({ session, setSession }) {
               },
             ]}
           >
+        {!isDesktopWeb && mobilePage === 'timetable' ? <Suspense fallback={<DesktopPageFallback styles={styles} colors={colors} />}><TimetablePage key={sessionUserId || 'local'} subjects={subjects} storageScope={sessionUserId} onBackToTasks={() => setMobilePage('tasks')} /></Suspense> : null}
         {!isDesktopWeb ? (
           <View style={{ flex: 1, display: mobilePage === 'study' ? 'flex' : 'none' }}>
           <Suspense fallback={<DesktopPageFallback styles={styles} colors={colors} />}>
@@ -1216,7 +1227,7 @@ export default function SignedInApp({ session, setSession }) {
           </Suspense>
           </View>
         ) : null}
-          <View style={{ flex: 1, display: !isDesktopWeb && mobilePage === 'study' ? 'none' : 'flex' }}>
+          <View style={{ flex: 1, display: !isDesktopWeb && mobilePage !== 'tasks' ? 'none' : 'flex' }}>
         {!isDesktopWeb ? (
           <View style={styles.header}>
             <View style={styles.headerCopy}>
@@ -1321,6 +1332,7 @@ export default function SignedInApp({ session, setSession }) {
             onAddTask={openNewTask}
             onAddSubject={openSubjects}
             onStudy={openStudy}
+            onTimetable={openTimetable}
             onFriends={openFriends}
             onChats={() => openChats()}
             styles={styles}

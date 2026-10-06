@@ -7,7 +7,7 @@ const { authPathFor } = await import(`data:text/javascript,${encodeURIComponent(
 const signedIn = { user: { id: 'test-user' } };
 const location = (path) => new URL(path, 'https://example.test');
 
-for (const path of ['/friends', '/subjects', '/study', '/settings', '/chats', '/chats/room-123', '/chats/room%20name']) {
+for (const path of ['/friends', '/subjects', '/study', '/timetable', '/settings', '/chats', '/chats/room-123', '/chats/room%20name']) {
   test(`reload preserves ${path} while restoring an existing session`, () => {
     assert.equal(authPathFor(undefined, location(path)), null);
     assert.equal(authPathFor(signedIn, location(path)), null);

@@ -25,6 +25,7 @@
 //      local-only data into the user-scoped key so users who upgrade from
 //      a pre-Supabase build don't silently lose their tasks/subjects.
 
+import { emptyTimetable } from '../../features/timetable/timetableUtils.mjs';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase, isSupabaseConfigured, currentUserId } from '../supabase';
 import { DEFAULT_AVATAR_EMOJI, normalizeProfile } from '../../shared/profile';
@@ -323,6 +324,11 @@ async function applyPendingWrite(uid, op) {
         .delete()
         .eq('user_id', uid)
         .eq('id', op.id);
+      if (error) throw error;
+      return;
+    }
+    case 'saveTimetable': {
+      const { error } = await supabase.from('timetables').upsert({ user_id: uid, data: op.timetable }, { onConflict: 'user_id' });
       if (error) throw error;
       return;
     }
@@ -1507,4 +1513,41 @@ export async function saveChangelogLastSeen(version) {
 
 export function newId() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+
+function timetableKey(uid) { return `@simpleapp:timetable:${uid || 'local'}:v1`; }
+export async function loadTimetable() {
+  const uid = await cloudMode();
+  const cached = await readLocalObject(timetableKey(uid));
+  if (uid) {
+    try {
+      await flushPendingWrites(uid);
+      // Pending offline saves take priority over an older server copy.
+      const pending = JSON.parse(await AsyncStorage.getItem(pendingWritesKey(uid)) || '[]');
+      if (pending.some(op => op.type === 'saveTimetable')) return cached || emptyTimetable();
+      const { data, error } = await supabase.from('timetables').select('data').eq('user_id', uid).maybeSingle();
+      if (error) throw error;
+      if (data?.data) { await writeLocalObject(timetableKey(uid), data.data); return data.data; }
+    } catch (error) {
+      if (!cached) throw error;
+    }
+  }
+  return cached || emptyTimetable();
+}
+export async function saveTimetable(timetable) {
+  const uid = await cloudMode();
+  if (uid) {
+    return runQueued(async () => {
+      try {
+        await flushPendingWrites(uid);
+        const { error } = await supabase.from('timetables').upsert({ user_id: uid, data: timetable }, { onConflict: 'user_id' });
+        if (error) throw error;
+      } catch (error) {
+        await queueIfOffline(uid, { type: 'saveTimetable', timetable }, error);
+      }
+      await AsyncStorage.setItem(timetableKey(uid), JSON.stringify(timetable));
+    });
+  }
+  await AsyncStorage.setItem(timetableKey(uid), JSON.stringify(timetable));
 }

@@ -10,7 +10,7 @@ export function authPathFor(session, { pathname = '/', search = '', hash = '' })
   if (!isLogin) return null;
   const next = new URLSearchParams(search).get('next');
   // Only permit app routes, never an external URL or another login redirect.
-  return next && /^\/(?:settings|study|subjects|friends|chats(?:\/[^/?#]+)?|)(?:[?#].*)?$/.test(next)
+  return next && /^\/(?:settings|study|timetable|subjects|friends|chats(?:\/[^/?#]+)?|)(?:[?#].*)?$/.test(next)
     ? next
     : '/';
 }

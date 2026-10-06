@@ -17,8 +17,16 @@
 
 export const CHANGELOG = [
   {
-    version: '0.3.4',
-    date: '2026-09-10',
+    version: '0.4.0',
+    date: '2026-10-06',
+    title: 'Timetable Release' ,
+    notes: [
+      'New: TIMETABLES!!! (idk school forced my hand cuz they got rid of student portals for their students which seems stupid ngl)',
+    ],
+  },
+  {
+    version: '0.3.5',
+    date: '2026-09-14',
     title: 'Minor bug fixes' ,
     notes: [
       'Improvement: Colourpicker cuz yeah',

@@ -38,6 +38,7 @@ export function BottomActionBar({
   onAddTask,
   onAddSubject,
   onStudy,
+  onTimetable,
   onFriends,
   onChats,
   styles,
@@ -95,6 +96,7 @@ export function BottomActionBar({
         onPress={onStudy}
         styles={styles}
       />
+      <BarButton label="Timetable" icon={'\u{1F5D3}'} accessibilityLabel="Open timetable" onPress={onTimetable} styles={styles} />
       <Pressable
         onPress={() => setAddMenuOpen((value) => !value)}
         accessibilityLabel="Open add menu"
@@ -128,6 +130,7 @@ export function BottomActionBar({
 
 const SIDEBAR_ITEMS = [
   { key: 'tasks', label: 'Tasks', icon: '\u2713' },
+  { key: 'timetable', label: 'Timetable', icon: '\u{1F5D3}' },
   { key: 'study', label: 'Study', icon: '\u23F1\uFE0F' },
   { key: 'chats', label: 'Chats', icon: '\u{1F4AC}' },
   { key: 'subjects', label: 'Subjects', icon: '\u{1F4DA}' },
@@ -143,6 +146,7 @@ export function DesktopSidebar({
   onToggle,
   onTasks,
   onStudy,
+  onTimetable,
   onSubjects,
   onFriends,
   onChats,
@@ -173,6 +177,7 @@ export function DesktopSidebar({
   const actions = {
     tasks: onTasks,
     study: onStudy,
+    timetable: onTimetable,
     chats: onChats,
     subjects: onSubjects,
     friends: onFriends,

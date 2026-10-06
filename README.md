@@ -210,3 +210,10 @@ Run receipt marker checks with `node --test src/features/chat/messageReceipts.te
 - Add reminders with `expo-notifications`.
 - Add conflict-aware offline sync using `updated_at` columns and retry state.
 - Add automated smoke tests for task, subject, auth, and sync flows.
+
+
+### Timetables
+
+The Timetable tab supports one repeating week or two alternating weeks. Assign the current week to Week 1 or Week 2; rotation advances every Monday. Add and edit lessons with a subject, teacher, room, and start/end times. Existing subject details can prefill lessons. Switching to one week preserves Week 2 lessons.
+
+For existing Supabase databases, run `migrations/20261006_timetables.sql` in the SQL Editor before using this feature. New databases include the table in `supabase-setup.sql`. Timetables are stored per user with offline caching; local mode stores them on the device.
