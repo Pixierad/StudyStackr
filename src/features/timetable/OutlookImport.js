@@ -15,7 +15,9 @@ export default function OutlookImport({ data, persist, saving }) {
       if (url.protocol !== 'https:' || !['outlook.live.com', 'outlook.office.com', 'outlook.office365.com'].includes(url.hostname) || !url.pathname.toLowerCase().endsWith('.ics')) throw new Error('Paste a published Outlook ICS link.');
       const response = await fetch(Platform.OS === 'web' ? `/api/outlook-calendar?url=${encodeURIComponent(url.href)}` : url.href);
       const body = await response.text();
-      if (!response.ok) throw new Error('Could not fetch this calendar. Check that the link is published, or paste its ICS contents below.');
+      const isHtml = /text\/html/i.test(response.headers.get('content-type') || '') || /^\s*<!doctype html|^\s*<html/i.test(body);
+      if (Platform.OS === 'web' && (response.status === 404 || response.status === 405 || isHtml)) throw new Error('The calendar import server is unavailable on this site. Run or deploy the Cloudflare Pages Functions, or paste the ICS contents below.');
+      if (!response.ok) throw new Error(Platform.OS === 'web' && /text\/plain/i.test(response.headers.get('content-type') || '') && body.length < 600 ? body : `Calendar request failed (HTTP ${response.status}). Try again or paste the ICS contents below.`);
       const parsed = parseOutlookCalendar(body, data); setPreview(parsed);
     } catch (e) { setError(e.message); } finally { setLoading(false); }
   }
