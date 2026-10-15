@@ -46,7 +46,7 @@ import {
   subscribeToChatNotifications,
 } from '../features/chat/chatRepository';
 import { supabase, isSupabaseConfigured } from '../services/supabase';
-import { loadAppData, touchProfileOnline } from '../services/storage';
+import { loadAppData, loadSubjects, touchProfileOnline } from '../services/storage';
 import { CHANGELOG, latestChangelogVersion } from '../features/changelog/changelog';
 import { normalizeProfile, publicName } from '../shared/profile';
 
@@ -1146,7 +1146,7 @@ export default function SignedInApp({ session, setSession }) {
           >
             <Suspense fallback={<DesktopPageFallback styles={styles} colors={colors} />}>
               {page === 'flashcards' ? <FlashcardsPage key={sessionUserId || 'local'} subjects={subjects} storageScope={sessionUserId} /> : null}
-              {page === 'timetable' ? <TimetablePage key={sessionUserId || 'local'} subjects={subjects} storageScope={sessionUserId} isDesktopWeb /> : null}
+              {page === 'timetable' ? <TimetablePage key={sessionUserId || 'local'} subjects={subjects} onSubjectsImported={async () => setSubjects(await loadSubjects())} storageScope={sessionUserId} isDesktopWeb /> : null}
               {page === 'study' ? (
                 <StudyPage
                   sessions={studySessions}
@@ -1223,7 +1223,7 @@ export default function SignedInApp({ session, setSession }) {
             ]}
           >
         {!isDesktopWeb && mobilePage === 'flashcards' ? <Suspense fallback={<DesktopPageFallback styles={styles} colors={colors} />}><FlashcardsPage key={sessionUserId || 'local'} subjects={subjects} storageScope={sessionUserId} onBackToTasks={() => setMobilePage('tasks')} /></Suspense> : null}
-        {!isDesktopWeb && mobilePage === 'timetable' ? <Suspense fallback={<DesktopPageFallback styles={styles} colors={colors} />}><TimetablePage key={sessionUserId || 'local'} subjects={subjects} storageScope={sessionUserId} onBackToTasks={() => setMobilePage('tasks')} /></Suspense> : null}
+        {!isDesktopWeb && mobilePage === 'timetable' ? <Suspense fallback={<DesktopPageFallback styles={styles} colors={colors} />}><TimetablePage key={sessionUserId || 'local'} subjects={subjects} onSubjectsImported={async () => setSubjects(await loadSubjects())} storageScope={sessionUserId} onBackToTasks={() => setMobilePage('tasks')} /></Suspense> : null}
         {!isDesktopWeb ? (
           <View style={{ flex: 1, display: mobilePage === 'study' ? 'flex' : 'none' }}>
           <Suspense fallback={<DesktopPageFallback styles={styles} colors={colors} />}>

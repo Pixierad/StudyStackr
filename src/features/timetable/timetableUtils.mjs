@@ -17,6 +17,6 @@ export function lessonError(lesson, lessons) {
   if (!lesson.subject.trim()) return 'Enter a subject.';
   if (!validTime(lesson.start) || !validTime(lesson.end)) return 'Enter times as HH:MM, for example 09:00.';
   if (lesson.end <= lesson.start) return 'End time must be after start time.';
-  if (lessons.some(item => item.id !== lesson.id && item.week === lesson.week && item.day === lesson.day && item.start < lesson.end && item.end > lesson.start)) return 'This lesson overlaps another lesson on this day.';
+  if (lessons.some(item => item.id !== lesson.id && (item.dates && lesson.dates || item.week === lesson.week) && item.day === lesson.day && item.start < lesson.end && item.end > lesson.start && (!item.dates || !lesson.dates || item.dates.some(date => lesson.dates.includes(date))))) return 'This lesson overlaps another lesson on this day.';
   return null;
 }

@@ -5,11 +5,12 @@ import { loadTimetable, saveTimetable, newId } from '../../services/storage';
 import OutlookImport from './OutlookImport';
 import { DAYS, currentRotation, lessonError, mondayISO } from './timetableUtils.mjs';
 
-export default function TimetablePage({ subjects = [], storageScope, isDesktopWeb, onBackToTasks }) {
+export default function TimetablePage({ subjects = [], storageScope, isDesktopWeb, onBackToTasks, onSubjectsImported }) {
   const { colors } = useTheme();
   const styles = makeStyles(colors, isDesktopWeb);
   const [data, setData] = useState(null);
   const [week, setWeek] = useState(1);
+  const [dateOffset, setDateOffset] = useState(0);
   const [draft, setDraft] = useState(null);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -31,7 +32,7 @@ export default function TimetablePage({ subjects = [], storageScope, isDesktopWe
   }, []);
   async function persist(next) {
     setSaving(true); setError('');
-    try { await saveTimetable(next); setData(next); return true; }
+    try { await saveTimetable(next); setData(next); setWeek(currentRotation(next)); return true; }
     catch (e) { setError(`Could not save timetable: ${e.message || 'Please try again.'}`); return false; }
     finally { setSaving(false); }
   }
@@ -43,6 +44,10 @@ export default function TimetablePage({ subjects = [], storageScope, isDesktopWe
   }
   if (!data) return <View style={styles.loading}>{error ? <><Text style={styles.error}>{error}</Text>{button('Retry', () => { setError(''); setRetry(value => value + 1); })}</> : <ActivityIndicator color={colors.primary} />}{onBackToTasks ? button('Back to tasks', onBackToTasks) : null}</View>;
   const rotation = currentRotation(data, now);
+  const viewedMonday = new Date(`${mondayISO(now)}T12:00:00`);
+  viewedMonday.setDate(viewedMonday.getDate()+dateOffset*7);
+  if (week !== currentRotation(data, viewedMonday)) viewedMonday.setDate(viewedMonday.getDate()+7);
+  const dayDate = index => { const d = new Date(viewedMonday); d.setDate(d.getDate()+index); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
   const today = (now.getDay() + 6) % 7;
   return <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
     {!isDesktopWeb ? <View style={styles.row}>{button('Back to tasks', onBackToTasks)}<Text style={styles.title}>Timetable</Text></View> : null}
@@ -57,10 +62,12 @@ export default function TimetablePage({ subjects = [], storageScope, isDesktopWe
         if (await persist({ ...data, anchorMonday: mondayISO(now), anchorWeek: value })) setWeek(value);
       }, rotation === value))}</View><Text style={styles.muted}>Weeks alternate automatically every Monday.</Text></> : <Text style={styles.muted}>The same timetable repeats every week. Week 2 lessons are kept if you switch rotations.</Text>}
     </View>
-    <OutlookImport data={data} persist={persist} saving={saving} />
+    <OutlookImport data={data} persist={persist} saving={saving} subjects={subjects} onSubjectsImported={onSubjectsImported} />
     {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
     <View style={styles.row}>{Array.from({ length: data.weekCount }, (_, i) => button(`View Week ${i + 1}`, () => { setWeek(i + 1); setDraft(null); setError(''); }, week === i + 1))}</View>
+    <View style={styles.row}>{button('Previous week', () => { const d = new Date(viewedMonday); d.setDate(d.getDate()-7); setDateOffset(Math.round((Date.parse(mondayISO(d))-Date.parse(mondayISO(now)))/604800000)); setWeek(currentRotation(data,d)); })}{button('This week', () => { setDateOffset(0); setWeek(rotation); })}{button('Next week', () => { const d = new Date(viewedMonday); d.setDate(d.getDate()+7); setDateOffset(Math.round((Date.parse(mondayISO(d))-Date.parse(mondayISO(now)))/604800000)); setWeek(currentRotation(data,d)); })}<Text style={styles.muted}>Week beginning {mondayISO(viewedMonday)}</Text></View>
     {draft ? <View style={styles.card}>
+      {draft.dates ? <Text style={styles.muted}>Editing this lesson updates all {draft.dates.length} imported dates.</Text> : null}
       <Text style={styles.title}>{data.lessons.some(item => item.id === draft.id) ? 'Edit lesson' : 'Add lesson'} · Week {draft.week}</Text>
       <View style={styles.row}>{DAYS.map((day, i) => button(day, () => setDraft(old => ({ ...old, day: i })), draft.day === i))}</View>
       {subjects.length ? <><Text style={styles.label}>Use an existing subject</Text><View style={styles.row}>{subjects.map(subject => button(subject.name, () => setDraft(old => ({ ...old, subject: subject.name, teacher: subject.teacher || '', room: subject.room || '' })), draft.subject === subject.name))}</View></> : null}
@@ -75,10 +82,10 @@ export default function TimetablePage({ subjects = [], storageScope, isDesktopWe
       })}{button('Cancel', () => { setDraft(null); setError(''); })}</View>
     </View> : null}
     {DAYS.map((day, index) => {
-      const lessons = data.lessons.filter(item => item.week === week && item.day === index).sort((a, b) => a.start.localeCompare(b.start));
+      const lessons = data.lessons.filter(item => item.day === index && (item.dates ? item.dates.includes(dayDate(index)) : item.week === week)).sort((a, b) => a.start.localeCompare(b.start));
       return <View key={day} style={[styles.card, today === index && rotation === week && { borderColor: colors.primary }]}>
-        <View style={styles.row}><Text style={styles.day}>{day}{today === index && rotation === week ? ' · Today' : ''}</Text>{button(`+ Add ${day} lesson`, () => { setError(''); setDraft({ id: newId(), week, day: index, subject: '', teacher: '', room: '', start: '09:00', end: '10:00' }); })}</View>
-        {!lessons.length ? <Text style={styles.muted}>No lessons scheduled</Text> : lessons.map(lesson => <View key={lesson.id} style={styles.lesson}>
+        <View style={styles.row}><Text style={styles.day}>{day} � {dayDate(index)}{today === index && rotation === week ? ' · Today' : ''}</Text>{button(`+ Add ${day} lesson`, () => { setError(''); setDraft({ id: newId(), week, day: index, subject: '', teacher: '', room: '', start: '09:00', end: '10:00' }); })}</View>
+        {!lessons.length ? <Text style={styles.muted}>{(data.holidays || []).find(h => dayDate(index) >= h.start && (h.start === h.end ? dayDate(index) === h.start : dayDate(index) < h.end))?.name || 'No lessons scheduled'}</Text> : lessons.map(lesson => <View key={lesson.id} style={styles.lesson}>
           <View style={{ flex: 1 }}><Text style={styles.label}>{lesson.start}–{lesson.end} · {lesson.subject}</Text><Text style={styles.muted}>{[lesson.teacher && `Teacher: ${lesson.teacher}`, lesson.room && `Room: ${lesson.room}`].filter(Boolean).join(' · ') || 'No teacher or room added'}</Text></View>
           <View style={styles.row}>{button('Edit', () => { setDraft({ ...lesson }); setError(''); })}{button('Delete', async () => { if (await persist({ ...data, lessons: data.lessons.filter(item => item.id !== lesson.id) })) { if (draft?.id === lesson.id) setDraft(null); } })}</View>
         </View>)}
