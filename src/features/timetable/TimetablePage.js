@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, AppState, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useTheme } from '../../shared/theme';
 import { loadTimetable, saveTimetable, newId } from '../../services/storage';
+import OutlookImport from './OutlookImport';
 import { DAYS, currentRotation, lessonError, mondayISO } from './timetableUtils.mjs';
 
 export default function TimetablePage({ subjects = [], storageScope, isDesktopWeb, onBackToTasks }) {
@@ -56,6 +57,7 @@ export default function TimetablePage({ subjects = [], storageScope, isDesktopWe
         if (await persist({ ...data, anchorMonday: mondayISO(now), anchorWeek: value })) setWeek(value);
       }, rotation === value))}</View><Text style={styles.muted}>Weeks alternate automatically every Monday.</Text></> : <Text style={styles.muted}>The same timetable repeats every week. Week 2 lessons are kept if you switch rotations.</Text>}
     </View>
+    <OutlookImport data={data} persist={persist} saving={saving} />
     {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
     <View style={styles.row}>{Array.from({ length: data.weekCount }, (_, i) => button(`View Week ${i + 1}`, () => { setWeek(i + 1); setDraft(null); setError(''); }, week === i + 1))}</View>
     {draft ? <View style={styles.card}>

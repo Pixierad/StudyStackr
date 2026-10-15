@@ -150,6 +150,7 @@ const ProfileOnboarding = React.lazy(() => import('../features/profile/ProfileOn
 const ChangelogSheet = React.lazy(() => import('../features/changelog/ChangelogSheet'));
 const FriendsSheet = React.lazy(() => import('../features/friends/FriendsSheet'));
 const ChatSheet = React.lazy(() => import('../features/chat/ChatSheet'));
+const FlashcardsPage = React.lazy(() => import('../features/flashcards/FlashcardsPage'));
 const TimetablePage = React.lazy(() => import('../features/timetable/TimetablePage'));
 const StudyPage = React.lazy(() => import('../features/study/StudyPage'));
 
@@ -177,6 +178,7 @@ function desktopRouteFromPath(pathname) {
   if (normalized === '/settings') return { page: 'settings', chatRoomId: null };
   if (normalized === '/chats') return { page: 'chats', chatRoomId: null };
   if (normalized === '/timetable') return { page: 'timetable', chatRoomId: null };
+  if (normalized === '/flashcards') return { page: 'flashcards', chatRoomId: null };
   if (normalized === '/study') return { page: 'study', chatRoomId: null };
   if (normalized === '/subjects') return { page: 'subjects', chatRoomId: null };
   if (normalized === '/friends') return { page: 'friends', chatRoomId: null };
@@ -193,6 +195,7 @@ function desktopPathFor(page, chatRoomId = null) {
   if (page === 'login') return '/login';
   if (page === 'settings') return '/settings';
   if (page === 'timetable') return '/timetable';
+  if (page === 'flashcards') return '/flashcards';
   if (page === 'study') return '/study';
   if (page === 'subjects') return '/subjects';
   if (page === 'friends') return '/friends';
@@ -938,6 +941,11 @@ export default function SignedInApp({ session, setSession }) {
     else setSubjectMgrVisible(true);
   }, [isDesktopWeb, navigateDesktopPage]);
 
+  const openFlashcards = useCallback(() => {
+    if (isDesktopWeb) navigateDesktopPage('flashcards');
+    else setMobilePage('flashcards');
+  }, [isDesktopWeb, navigateDesktopPage]);
+
   const openTimetable = useCallback(() => {
     if (isDesktopWeb) navigateDesktopPage('timetable');
     else setMobilePage('timetable');
@@ -979,7 +987,7 @@ export default function SignedInApp({ session, setSession }) {
   }, [isDesktopWeb, navigateDesktopPage]);
 
   const desktopHeaderTitle =
-    desktopPage === 'timetable' ? 'Timetable' : desktopPage === 'subjects'
+    desktopPage === 'flashcards' ? 'Flashcards' : desktopPage === 'timetable' ? 'Timetable' : desktopPage === 'subjects'
       ? 'Subjects'
       : desktopPage === 'study'
         ? 'Study'
@@ -1032,6 +1040,7 @@ export default function SignedInApp({ session, setSession }) {
           onToggle={() => setDesktopSidebarCollapsed((value) => !value)}
           onTasks={() => navigateDesktopPage('tasks')}
           onStudy={openStudy}
+            onFlashcards={openFlashcards}
             onTimetable={openTimetable}
           onSubjects={openSubjects}
           onFriends={openFriends}
@@ -1136,6 +1145,7 @@ export default function SignedInApp({ session, setSession }) {
             ]}
           >
             <Suspense fallback={<DesktopPageFallback styles={styles} colors={colors} />}>
+              {page === 'flashcards' ? <FlashcardsPage key={sessionUserId || 'local'} subjects={subjects} storageScope={sessionUserId} /> : null}
               {page === 'timetable' ? <TimetablePage key={sessionUserId || 'local'} subjects={subjects} storageScope={sessionUserId} isDesktopWeb /> : null}
               {page === 'study' ? (
                 <StudyPage
@@ -1212,6 +1222,7 @@ export default function SignedInApp({ session, setSession }) {
               },
             ]}
           >
+        {!isDesktopWeb && mobilePage === 'flashcards' ? <Suspense fallback={<DesktopPageFallback styles={styles} colors={colors} />}><FlashcardsPage key={sessionUserId || 'local'} subjects={subjects} storageScope={sessionUserId} onBackToTasks={() => setMobilePage('tasks')} /></Suspense> : null}
         {!isDesktopWeb && mobilePage === 'timetable' ? <Suspense fallback={<DesktopPageFallback styles={styles} colors={colors} />}><TimetablePage key={sessionUserId || 'local'} subjects={subjects} storageScope={sessionUserId} onBackToTasks={() => setMobilePage('tasks')} /></Suspense> : null}
         {!isDesktopWeb ? (
           <View style={{ flex: 1, display: mobilePage === 'study' ? 'flex' : 'none' }}>
@@ -1332,6 +1343,7 @@ export default function SignedInApp({ session, setSession }) {
             onAddTask={openNewTask}
             onAddSubject={openSubjects}
             onStudy={openStudy}
+            onFlashcards={openFlashcards}
             onTimetable={openTimetable}
             onFriends={openFriends}
             onChats={() => openChats()}

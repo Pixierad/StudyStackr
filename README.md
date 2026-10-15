@@ -217,3 +217,52 @@ Run receipt marker checks with `node --test src/features/chat/messageReceipts.te
 The Timetable tab supports one repeating week or two alternating weeks. Assign the current week to Week 1 or Week 2; rotation advances every Monday. Add and edit lessons with a subject, teacher, room, and start/end times. Existing subject details can prefill lessons. Switching to one week preserves Week 2 lessons.
 
 For existing Supabase databases, run `migrations/20261006_timetables.sql` in the SQL Editor before using this feature. New databases include the table in `supabase-setup.sql`. Timetables are stored per user with offline caching; local mode stores them on the device.
+
+
+### Flashcards
+
+The Flashcards page (`/flashcards` on web, Cards on mobile) supports private sets,
+folders and subject filters; editable card pairs; Know / Don't know study groups;
+animated flipping with reduced-motion support; and multiple-choice, fill-in-the-blank
+and written quizzes. Marking accepts minor spelling changes and reordered key words,
+not arbitrary semantic paraphrases. Feedback shows correct answers in green and
+incorrect submitted answers in red. Multiple-choice distractors come from other cards
+in the selected group; a group with only one unique answer uses written questions.
+
+Import copied/exported pairs from Quizlet, Gizmo or other sources using tabs, CSV,
+semicolons or pipes. Preview validates every row. Direct Quizlet/Gizmo URL scraping
+is not supported. Editing a set also lets you move it between folders and subjects.
+Public discovery searches sets explicitly published by StudyStackr users, rather than
+searching third-party websites. Publishing and removing public copies require an
+account and connection. Updates to private cards do not change the public copy until
+published again.
+
+Apply `migrations/20261015_flashcards.sql` to an existing Supabase database (included
+in `supabase-setup.sql` for new installations). Row-level security protects private
+libraries and restricts public-set writes to their owners. Libraries cache locally;
+failed cloud saves keep the local version and show a Sync library retry action.
+Concurrent edits on multiple devices use the last saved library.
+
+### Outlook timetable import
+
+Timetable accepts a published Outlook HTTPS ICS link, or pasted ICS file contents.
+The import previews weekly lessons, prevents overlaps and duplicates, and appends
+only after confirmation. It is a snapshot, not a live calendar subscription. Choose
+one- or two-week rotation before importing. Weekly and fortnightly recurring events
+are supported; one-off events and recurrence exceptions are reported for manual entry.
+Imported times use the device timezone. Imported lessons continue repeating even
+past an Outlook recurrence end date, so review term boundaries in the timetable.
+
+The web link fetcher is a Cloudflare Pages Function at
+`functions/api/outlook-calendar.js`. Deploy the repository with Pages Functions support;
+a plain static `dist` upload alone does not include it. It only fetches HTTPS ICS
+links on the three supported Outlook hosts, rejects redirects, limits responses to
+2 MB, times out, and disables caching. Local Expo web development can use pasted ICS
+contents; native apps fetch the published link directly. Calendar URLs are not saved
+in the timetable.
+
+Run feature logic checks with:
+
+```powershell
+node --test src/features/flashcards/flashcardUtils.test.mjs src/features/timetable/outlookImport.test.mjs src/features/timetable/timetableUtils.test.mjs apps/website/authRouting.test.mjs
+```

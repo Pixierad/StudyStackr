@@ -17,6 +17,26 @@
 
 export const CHANGELOG = [
   {
+    version: '0.4.1',
+    date: '2026-10-06',
+    title: 'Flash cards and timetable import',
+    notes: [
+      'Added flash cards for revision and studying.',
+      'Added timetable import using an Outlook calendar link.',
+      'How to get your Outlook timetable link:',
+      '1. Open Outlook Calendar in your web browser.',
+      '2. Click the Settings (gear) icon in the top-right corner.',
+      '3. Go to Calendar > Shared calendars.',
+      '4. Scroll down to Publish a calendar.',
+      '5. Select the calendar containing your timetable.',
+      '6. Choose the appropriate permission level (e.g. Can view all details).',
+      '7. Click Publish.',
+      '8. Copy the ICS link (not the HTML link this is important as it\'s a subscription link so it keeps up with all changes).',
+      '9. Return to the app and paste the ICS link into the timetable import field.',
+      '10. Click Import to load your timetable.',
+    ],
+  },
+  {
     version: '0.4.0',
     date: '2026-10-06',
     title: 'Timetable Release' ,

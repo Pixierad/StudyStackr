@@ -39,6 +39,7 @@ export function BottomActionBar({
   onAddSubject,
   onStudy,
   onTimetable,
+  onFlashcards,
   onFriends,
   onChats,
   styles,
@@ -96,6 +97,7 @@ export function BottomActionBar({
         onPress={onStudy}
         styles={styles}
       />
+      <BarButton label="Cards" icon={'\u{1F4C7}'} accessibilityLabel="Open flashcards" onPress={onFlashcards} styles={styles} />
       <BarButton label="Timetable" icon={'\u{1F5D3}'} accessibilityLabel="Open timetable" onPress={onTimetable} styles={styles} />
       <Pressable
         onPress={() => setAddMenuOpen((value) => !value)}
@@ -131,6 +133,7 @@ export function BottomActionBar({
 const SIDEBAR_ITEMS = [
   { key: 'tasks', label: 'Tasks', icon: '\u2713' },
   { key: 'timetable', label: 'Timetable', icon: '\u{1F5D3}' },
+  { key: 'flashcards', label: 'Flashcards', icon: '\u{1F4C7}' },
   { key: 'study', label: 'Study', icon: '\u23F1\uFE0F' },
   { key: 'chats', label: 'Chats', icon: '\u{1F4AC}' },
   { key: 'subjects', label: 'Subjects', icon: '\u{1F4DA}' },
@@ -147,6 +150,7 @@ export function DesktopSidebar({
   onTasks,
   onStudy,
   onTimetable,
+  onFlashcards,
   onSubjects,
   onFriends,
   onChats,
@@ -178,6 +182,7 @@ export function DesktopSidebar({
     tasks: onTasks,
     study: onStudy,
     timetable: onTimetable,
+    flashcards: onFlashcards,
     chats: onChats,
     subjects: onSubjects,
     friends: onFriends,
